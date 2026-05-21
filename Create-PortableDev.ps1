@@ -22,7 +22,11 @@ $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $CacheDir = Join-Path $Root ".cache"
 $TmpDir = Join-Path $Root ".tmp"
 $LocalDir = Join-Path $Root ".local"
+$ConfigDir = Join-Path $Root ".config"
 $OptDir = Join-Path $LocalDir "opt"
+$NpmConfigDir = Join-Path $ConfigDir "npm"
+$NpmConfigFile = Join-Path $NpmConfigDir "npmrc"
+$NpmGlobalConfigFile = Join-Path $NpmConfigDir "global-npmrc"
 $PythonDir = Join-Path $OptDir "python"
 $NodeDir = Join-Path $OptDir "node"
 $UvDir = Join-Path $OptDir "uv"
@@ -31,14 +35,6 @@ $PandocDir = Join-Path $OptDir "pandoc"
 $VsCodeDir = Join-Path $OptDir "vscode"
 
 $VsCodeExtensions = @(
-    # VSCode Remote Development
-    "ms-vscode-remote.vscode-remote-extensionpack",
-    "ms-vscode-remote.remote-wsl",
-    "ms-vscode-remote.remote-containers",
-    "ms-vscode-remote.remote-ssh",
-    "ms-vscode-remote.remote-ssh-edit",
-    "ms-vscode.remote-server",
-    "ms-vscode.remote-explorer",
     # カラーテーマ
     "zhuangtongfa.material-theme",
     "pkief.material-icon-theme",
@@ -161,7 +157,7 @@ function Expand-ZipToCleanDir {
         [switch]$StripSingleTopDirectory
     )
 
-    $Temp = Join-Path $env:TEMP ("pdev-" + [guid]::NewGuid().ToString("N"))
+    $Temp = Join-Path $TmpDir ("extract-" + [guid]::NewGuid().ToString("N"))
     New-Dir $Temp
     Write-Host "📂 Expanding: $ZipPath"
     try {
@@ -284,6 +280,7 @@ function Install-Python {
 
     # ユーザー環境の site-packages を見ないようにして、ポータブル環境へ pip を入れる。
     $Env:PYTHONNOUSERSITE = "1"
+    $Env:PIP_CONFIG_FILE = "NUL"
     $Env:PIP_CACHE_DIR = Join-Path $CacheDir "pip"
     $Env:PIP_DISABLE_PIP_VERSION_CHECK = "1"
     Write-Host "🐍 Installing Python $PythonMinor..." -ForegroundColor Gray
@@ -510,15 +507,22 @@ chcp 65001 >nul
 setlocal
 set "PDEV_ROOT=%~dp0"
 set "PYTHONNOUSERSITE=1"
+set "PIP_CONFIG_FILE=NUL"
 set "PIP_CACHE_DIR=%PDEV_ROOT%.cache\pip"
 set "PIP_DISABLE_PIP_VERSION_CHECK=1"
 set "UV_CACHE_DIR=%PDEV_ROOT%.cache\uv"
+set "UV_NO_CONFIG=1"
 set "PDEV_OPT=%PDEV_ROOT%.local\opt"
+set "PDEV_CONFIG=%PDEV_ROOT%.config"
 set "UV_PYTHON_INSTALL_DIR=%PDEV_OPT%\uv\python"
 set "UV_TOOL_DIR=%PDEV_OPT%\uv\tools"
 set "UV_TOOL_BIN_DIR=%PDEV_OPT%\uv\bin"
 set "NPM_CONFIG_PREFIX=%PDEV_OPT%\node\npm-global"
 set "NPM_CONFIG_CACHE=%PDEV_ROOT%.cache\npm"
+set "NPM_CONFIG_USERCONFIG=%PDEV_CONFIG%\npm\npmrc"
+set "NPM_CONFIG_GLOBALCONFIG=%PDEV_CONFIG%\npm\global-npmrc"
+set "VSCODE_USER_DATA_DIR=%PDEV_OPT%\vscode\data\user-data"
+set "VSCODE_EXTENSIONS_DIR=%PDEV_OPT%\vscode\data\extensions"
 set "PATH=%PDEV_OPT%\python;%PDEV_OPT%\python\Scripts;%PDEV_OPT%\node;%PDEV_OPT%\node\npm-global;%PDEV_OPT%\node\npm-global\bin;%PDEV_OPT%\uv;%PDEV_OPT%\uv\bin;%PDEV_OPT%\jq;%PDEV_OPT%\pandoc;%PDEV_OPT%\vscode;%PDEV_OPT%\vscode\bin;%PATH%"
 
 if not exist "%PDEV_OPT%\vscode\Code.exe" (
@@ -526,7 +530,7 @@ if not exist "%PDEV_OPT%\vscode\Code.exe" (
   exit /b 1
 )
 
-start "" "%PDEV_OPT%\vscode\Code.exe" --new-window "%PDEV_ROOT%."
+start "" "%PDEV_OPT%\vscode\Code.exe" --user-data-dir "%VSCODE_USER_DATA_DIR%" --extensions-dir "%VSCODE_EXTENSIONS_DIR%" --new-window "%PDEV_ROOT%."
 exit /b 0
 '@
 
@@ -536,15 +540,20 @@ chcp 65001 >nul
 setlocal
 set "PDEV_ROOT=%~dp0"
 set "PYTHONNOUSERSITE=1"
+set "PIP_CONFIG_FILE=NUL"
 set "PIP_CACHE_DIR=%PDEV_ROOT%.cache\pip"
 set "PIP_DISABLE_PIP_VERSION_CHECK=1"
 set "UV_CACHE_DIR=%PDEV_ROOT%.cache\uv"
+set "UV_NO_CONFIG=1"
 set "PDEV_OPT=%PDEV_ROOT%.local\opt"
+set "PDEV_CONFIG=%PDEV_ROOT%.config"
 set "UV_PYTHON_INSTALL_DIR=%PDEV_OPT%\uv\python"
 set "UV_TOOL_DIR=%PDEV_OPT%\uv\tools"
 set "UV_TOOL_BIN_DIR=%PDEV_OPT%\uv\bin"
 set "NPM_CONFIG_PREFIX=%PDEV_OPT%\node\npm-global"
 set "NPM_CONFIG_CACHE=%PDEV_ROOT%.cache\npm"
+set "NPM_CONFIG_USERCONFIG=%PDEV_CONFIG%\npm\npmrc"
+set "NPM_CONFIG_GLOBALCONFIG=%PDEV_CONFIG%\npm\global-npmrc"
 set "PATH=%PDEV_OPT%\python;%PDEV_OPT%\python\Scripts;%PDEV_OPT%\node;%PDEV_OPT%\node\npm-global;%PDEV_OPT%\node\npm-global\bin;%PDEV_OPT%\uv;%PDEV_OPT%\uv\bin;%PDEV_OPT%\jq;%PDEV_OPT%\pandoc;%PDEV_OPT%\vscode;%PDEV_OPT%\vscode\bin;%PATH%"
 for /F "delims=" %%A in ('echo prompt `$E ^| cmd') do set "ESC=%%A"
 
@@ -591,10 +600,14 @@ echo ✅ Portable dev environment is ready.
 New-Dir $CacheDir
 New-Dir $TmpDir
 New-Dir $LocalDir
+New-Dir $ConfigDir
 New-Dir $OptDir
+New-Dir $NpmConfigDir
 New-Dir (Join-Path $CacheDir "pip")
 New-Dir (Join-Path $CacheDir "uv")
 New-Dir (Join-Path $CacheDir "npm")
+Set-Content -LiteralPath $NpmConfigFile -Value $null -Encoding ASCII
+Set-Content -LiteralPath $NpmGlobalConfigFile -Value $null -Encoding ASCII
 New-Dir $PythonDir
 New-Dir $NodeDir
 New-Dir $UvDir

@@ -17,6 +17,7 @@ Windows 上に、管理者権限なしで使えるポータブル開発環境を
 ```text
 .
 ├─ .local\opt\      # python / node / uv / jq / pandoc / vscode の実体
+├─ .config\npm\     # npm のポータブル設定ファイル
 ├─ .cache\          # pip / uv / npm のキャッシュ
 ├─ .tmp\            # zipball、exe、get-pip.py、拡張機能インストールログなどの一時ファイル
 ├─ start-pdev.cmd   # ポータブル PATH で VSCode を起動
@@ -35,7 +36,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 既存の一時ファイルや導入済みツールを作り直す場合:
 
 ```powershell
-Remove-Item .local, .tmp -Recurse -Force
+Remove-Item .local, .tmp, .config -Recurse -Force
 .\Create-PortableDev.ps1 -Force
 ```
 
@@ -72,6 +73,15 @@ uv     : $(uv --version)
 jq     : $(jq --version)
 pandoc : $(pandoc --version)
 "@
+
+(Get-Command python).Source
+(Get-Command pip).Source
+(Get-Command node).Source
+(Get-Command npm).Source
+(Get-Command uv).Source
+(Get-Command jq).Source
+(Get-Command pandoc).Source
+(Get-Command code).Source
 ```
 
 ## バージョン指定
@@ -122,6 +132,42 @@ bierner.markdown-mermaid
 ```
 
 拡張機能のインストールログは `.tmp\vscode-extension-install.log` に出力されます。
+
+## 使い方
+
+```powershell
+# pip
+mkdir -Force "$env:PDEV_ROOT\.tmp\pip" ; cd "$env:PDEV_ROOT\.tmp\pip"
+pip install                    glances
+pip download -d wheel          glances
+pip install --find-links=wheel glances
+pip list
+glances
+
+# uv
+mkdir -Force "$env:PDEV_ROOT\.tmp\pip" ; cd "$env:PDEV_ROOT\.tmp\pip"
+uv init
+uv venv
+pip download -d wheel rich-cli
+uv add --dev --find-links=wheel rich-cli
+uv pip list
+uv run rich "$env:PDEV_ROOT\README.md"
+
+# npm
+mkdir -Force "$env:PDEV_ROOT\.tmp\npm" ; cd "$env:PDEV_ROOT\.tmp\npm"
+npm -g i   gtop
+npm pack   gtop
+npm -g i .\gtop-1.1.5.tgz
+npm -g list
+gtop
+
+# jq
+echo '{ "name": "Alice", "age": 25 }' | jq
+
+# pandoc
+mkdir -Force "$env:PDEV_ROOT\.tmp\pandoc" ; cd "$env:PDEV_ROOT\.tmp\pandoc"
+pandoc "$env:PDEV_ROOT\README.md" -o README.html
+```
 
 ## 参考資料
 
