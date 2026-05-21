@@ -1,0 +1,91 @@
+name: Validate Portable Dev Bootstrap
+
+on:
+  push:
+    paths:
+      - "Create-PortableDev.ps1"
+      - ".github/workflows/validate-portable-dev.yml"
+  pull_request:
+    paths:
+      - "Create-PortableDev.ps1"
+      - ".github/workflows/validate-portable-dev.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validate on Windows PowerShell
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Confirm Windows PowerShell
+        run: |
+          $PSVersionTable
+          if ($PSVersionTable.PSEdition -ne 'Desktop') {
+            throw "This workflow must run on Windows PowerShell, not pwsh."
+          }
+
+      - name: Parse Create-PortableDev.ps1
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path '.\Create-PortableDev.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          ) > $null
+
+          if ($errors) {
+            $errors | ForEach-Object {
+              Write-Error ("{0}:{1}" -f $_.Extent.StartLineNumber, $_.Message)
+            }
+            exit 1
+          }
+
+      - name: Bootstrap portable dev environment
+        run: |
+          .\Create-PortableDev.ps1 -Force
+
+      - name: Verify generated commands
+        run: |
+          cmd.exe /d /c verify-pdev.cmd
+
+      - name: Verify expected layout
+        run: |
+          $requiredPaths = @(
+            '.local\opt\python\python.exe',
+            '.local\opt\node\node.exe',
+            '.local\opt\uv\uv.exe',
+            '.local\opt\jq\jq.exe',
+            '.local\opt\pandoc\pandoc.exe',
+            '.local\opt\vscode\Code.exe',
+            '.local\opt\vscode\bin\code.cmd',
+            '.local\opt\vscode\data\user-data\User\settings.json',
+            '.local\opt\vscode\data\extensions',
+            '.cache\pip',
+            '.cache\uv',
+            '.cache\npm',
+            '.tmp'
+          )
+
+          foreach ($path in $requiredPaths) {
+            if (-not (Test-Path -LiteralPath $path)) {
+              throw "Missing expected path: $path"
+            }
+          }
+
+      - name: Upload setup logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-dev-logs
+          path: |
+            .tmp/vscode-extension-install.log
+          if-no-files-found: ignore

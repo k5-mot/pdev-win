@@ -519,7 +519,7 @@ set "UV_TOOL_DIR=%PDEV_OPT%\uv\tools"
 set "UV_TOOL_BIN_DIR=%PDEV_OPT%\uv\bin"
 set "NPM_CONFIG_PREFIX=%PDEV_OPT%\node\npm-global"
 set "NPM_CONFIG_CACHE=%PDEV_ROOT%.cache\npm"
-set "PATH=%PDEV_OPT%\python;%PDEV_OPT%\python\Scripts;%PDEV_OPT%\node;%PDEV_OPT%\node\npm-global;%PDEV_OPT%\node\npm-global\bin;%PDEV_OPT%\uv;%PDEV_OPT%\uv\bin;%PDEV_OPT%\jq;%PDEV_OPT%\pandoc;%PDEV_OPT%\vscode;%PATH%"
+set "PATH=%PDEV_OPT%\python;%PDEV_OPT%\python\Scripts;%PDEV_OPT%\node;%PDEV_OPT%\node\npm-global;%PDEV_OPT%\node\npm-global\bin;%PDEV_OPT%\uv;%PDEV_OPT%\uv\bin;%PDEV_OPT%\jq;%PDEV_OPT%\pandoc;%PDEV_OPT%\vscode;%PDEV_OPT%\vscode\bin;%PATH%"
 
 if not exist "%PDEV_OPT%\vscode\Code.exe" (
   echo VSCode executable was not found: "%PDEV_OPT%\vscode\Code.exe"
@@ -545,7 +545,7 @@ set "UV_TOOL_DIR=%PDEV_OPT%\uv\tools"
 set "UV_TOOL_BIN_DIR=%PDEV_OPT%\uv\bin"
 set "NPM_CONFIG_PREFIX=%PDEV_OPT%\node\npm-global"
 set "NPM_CONFIG_CACHE=%PDEV_ROOT%.cache\npm"
-set "PATH=%PDEV_OPT%\python;%PDEV_OPT%\python\Scripts;%PDEV_OPT%\node;%PDEV_OPT%\node\npm-global;%PDEV_OPT%\node\npm-global\bin;%PDEV_OPT%\uv;%PDEV_OPT%\uv\bin;%PDEV_OPT%\jq;%PDEV_OPT%\pandoc;%PDEV_OPT%\vscode;%PATH%"
+set "PATH=%PDEV_OPT%\python;%PDEV_OPT%\python\Scripts;%PDEV_OPT%\node;%PDEV_OPT%\node\npm-global;%PDEV_OPT%\node\npm-global\bin;%PDEV_OPT%\uv;%PDEV_OPT%\uv\bin;%PDEV_OPT%\jq;%PDEV_OPT%\pandoc;%PDEV_OPT%\vscode;%PDEV_OPT%\vscode\bin;%PATH%"
 for /F "delims=" %%A in ('echo prompt `$E ^| cmd') do set "ESC=%%A"
 
 echo 🐍 [python]
@@ -561,7 +561,7 @@ node --version || exit /b 1
 echo.
 
 echo 📦 [npm]
-call npm --version || exit /b 1
+cmd.exe /d /c npm --version || exit /b 1
 echo.
 
 echo ⚡ [uv]
@@ -577,11 +577,10 @@ pandoc --version || exit /b 1
 echo.
 
 echo 🖥️  [vscode]
-call Code.cmd --version || exit /b 1
+cmd.exe /d /c Code.cmd --version || exit /b 1
 echo.
-echo ✅ Portable dev environment is ready.
 
-PAUSE
+echo ✅ Portable dev environment is ready.
 "@
 
     Set-Content -LiteralPath (Join-Path $Root "start-pdev.cmd") -Value $StartCmd -Encoding ASCII
