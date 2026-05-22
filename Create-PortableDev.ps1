@@ -986,7 +986,8 @@ function Test-PortablePip {
         Invoke-LoggedCommand $LogPath "pip" @("download", "-d", $PipPackageDir, "pyfiglet")
         Invoke-LoggedCommand $LogPath "pip" @("install", "--find-links=$PipPackageDir", "pyfiglet")
         Invoke-LoggedCommand $LogPath "pip" @("list")
-        Invoke-LoggedCommand $LogPath "python" @("-m", "pyfiglet", "portable pip works")
+        Invoke-LoggedCommand $LogPath "pyfiglet" @("portable pip works")
+        # Invoke-LoggedCommand $LogPath "python" @("-m", "pyfiglet", "portable pip works")
     } finally {
         Pop-Location
     }
@@ -999,7 +1000,7 @@ npm のパッケージ取得、グローバルインストール、CLI 実行を
 
 .DESCRIPTION
 npm pack で cowsay の tgz を .local\pkgs\npm へ保存し、ポータブル Node.js の npm-global へインストールして、
-cowsay.cmd が実行できることを確認します。詳細出力はログファイルに保存します。
+PATH から cowsay コマンドが実行できることを確認します。詳細出力はログファイルに保存します。
 
 .PARAMETER LogPath
 検証ログを書き込むファイルのパス。
@@ -1018,7 +1019,8 @@ function Test-PortableNpm {
         $CowsayTgz = (Get-ChildItem -LiteralPath $NpmPackageDir -Filter "cowsay-*.tgz" | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
         Invoke-LoggedCommand $LogPath "npm" @("-g", "i", $CowsayTgz)
         Invoke-LoggedCommand $LogPath "npm" @("-g", "list", "--depth=0")
-        Invoke-LoggedCommand $LogPath (Join-Path $NodeDir "npm-global\cowsay.cmd") @("portable npm works")
+        Invoke-LoggedCommand $LogPath "cowsay" @("portable npm works")
+        # Invoke-LoggedCommand $LogPath "cmd.exe" @("/d", "/c", "cowsay", "portable npm works")
     } finally {
         Pop-Location
     }
