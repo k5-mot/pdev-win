@@ -986,8 +986,7 @@ function Test-PortablePip {
         Invoke-LoggedCommand $LogPath "pip" @("download", "-d", $PipPackageDir, "pyfiglet")
         Invoke-LoggedCommand $LogPath "pip" @("install", "--find-links=$PipPackageDir", "pyfiglet")
         Invoke-LoggedCommand $LogPath "pip" @("list")
-        pyfiglet "portable pip works"
-        # Invoke-LoggedCommand $LogPath "pyfiglet" @("portable pip works")
+        Invoke-LoggedCommand $LogPath "python" @("-m", "pyfiglet", "portable pip works")
     } finally {
         Pop-Location
     }
@@ -1019,8 +1018,7 @@ function Test-PortableNpm {
         $CowsayTgz = (Get-ChildItem -LiteralPath $NpmPackageDir -Filter "cowsay-*.tgz" | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
         Invoke-LoggedCommand $LogPath "npm" @("-g", "i", $CowsayTgz)
         Invoke-LoggedCommand $LogPath "npm" @("-g", "list", "--depth=0")
-        cowsay "portable npm works"
-        # Invoke-LoggedCommand $LogPath "cowsay" @("portable npm works")
+        Invoke-LoggedCommand $LogPath (Join-Path $NodeDir "npm-global\cowsay.cmd") @("portable npm works")
     } finally {
         Pop-Location
     }
@@ -1054,8 +1052,7 @@ function Test-PortableUv {
         Invoke-LoggedCommand $LogPath "pip" @("download", "-d", $PipPackageDir, "catsay-cli")
         Invoke-LoggedCommand $LogPath "uv" @("add", "--dev", "--find-links=$PipPackageDir", "catsay-cli")
         Invoke-LoggedCommand $LogPath "uv" @("pip", "list")
-        uv run catsay "portable uv works"
-        # Invoke-LoggedCommand $LogPath "uv" @("run", "catsay", "portable uv works")
+        Invoke-LoggedCommand $LogPath "uv" @("run", "catsay", "portable uv works")
     } finally {
         Pop-Location
     }

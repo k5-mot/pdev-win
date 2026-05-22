@@ -25,6 +25,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepare allowed workspace
+        run: |
+          $target = Join-Path $env:USERPROFILE 'Desktop\pdev-win'
+          if (Test-Path -LiteralPath $target) {
+            Remove-Item -LiteralPath $target -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Path $target | Out-Null
+          Copy-Item -LiteralPath '.\Create-PortableDev.ps1' -Destination $target -Force
+          Copy-Item -LiteralPath '.\README.md' -Destination $target -Force
+          Copy-Item -LiteralPath '.\.github' -Destination $target -Recurse -Force
+
+          "PDEV_WORKSPACE=$target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Confirm Windows PowerShell
         run: |
           $PSVersionTable
@@ -33,6 +47,7 @@ jobs:
           }
 
       - name: Parse Create-PortableDev.ps1
+        working-directory: ${{ env.PDEV_WORKSPACE }}
         run: |
           $tokens = $null
           $errors = $null
@@ -50,14 +65,17 @@ jobs:
           }
 
       - name: Bootstrap portable dev environment
+        working-directory: ${{ env.PDEV_WORKSPACE }}
         run: |
           .\Create-PortableDev.ps1 -Force
 
       - name: Verify generated commands
+        working-directory: ${{ env.PDEV_WORKSPACE }}
         run: |
           cmd.exe /d /c verify-pdev.cmd
 
       - name: Verify expected layout
+        working-directory: ${{ env.PDEV_WORKSPACE }}
         run: |
           $requiredPaths = @(
             '.local\opt\python\python.exe',
@@ -72,7 +90,10 @@ jobs:
             '.cache\pip',
             '.cache\uv',
             '.cache\npm',
-            '.tmp'
+            '.local\pkgs',
+            '.local\tmp',
+            '.local\tmp\verify-pdev.log',
+            '.local\tmp\vscode-extension-install.log'
           )
 
           foreach ($path in $requiredPaths) {
@@ -87,5 +108,6 @@ jobs:
         with:
           name: portable-dev-logs
           path: |
-            .tmp/vscode-extension-install.log
+            ${{ env.PDEV_WORKSPACE }}/.local/tmp/vscode-extension-install.log
+            ${{ env.PDEV_WORKSPACE }}/.local/tmp/verify-pdev.log
           if-no-files-found: ignore
