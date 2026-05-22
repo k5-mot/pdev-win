@@ -1,25 +1,29 @@
 # Portable Development Environment for Windows
 
 Windows 上に、管理者権限なしで使えるポータブル開発環境を作成するためのセットアップスクリプトです。
+また、ユーザディレクトリ以下の"Desktop"や"Downloads"にすべてのファイルを置いて使うことを想定しています。
 
 ## 含まれるツール
 
+- Visual Studio Code Portable
+- VSCode 拡張機能一式
 - Python embeddable package
+- pip
 - Node.js
 - uv
 - jq
 - pandoc
-- Visual Studio Code Portable
-- VSCode 拡張機能一式
 
 ## ディレクトリ構成
 
 ```text
 .
 ├─ .local\opt\      # python / node / uv / jq / pandoc / vscode の実体
+├─ .local\pkgs\     # zipball、exe、wheel、tgz などの取得物
+├─ .local\tmp\      # 展開用ディレクトリ、ログ、作業用の一時ファイル
+├─ .local\home\     # 子プロセス用の USERPROFILE / HOME / AppData
 ├─ .config\npm\     # npm のポータブル設定ファイル
 ├─ .cache\          # pip / uv / npm のキャッシュ
-├─ .tmp\            # zipball、exe、get-pip.py、拡張機能インストールログなどの一時ファイル
 ├─ start-pdev.cmd   # ポータブル PATH で VSCode を起動
 └─ verify-pdev.cmd  # 各ツールの疎通確認
 ```
@@ -27,6 +31,8 @@ Windows 上に、管理者権限なしで使えるポータブル開発環境を
 ## セットアップ
 
 `pwsh.exe` ではなく Windows PowerShell の `powershell.exe` で実行してください。
+このリポジトリは `%USERPROFILE%\Desktop` または `%USERPROFILE%\Downloads` 配下に置いてください。
+それ以外の場所では `Create-PortableDev.ps1` が停止します。
 
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
@@ -36,7 +42,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 既存の一時ファイルや導入済みツールを作り直す場合:
 
 ```powershell
-Remove-Item .local, .tmp, .config -Recurse -Force
+Remove-Item .cache, .config, .local -Recurse -Force
 .\Create-PortableDev.ps1 -Force
 ```
 
@@ -61,7 +67,9 @@ VSCode は `.local\opt\vscode\Code.exe` から起動します。VSCode Portable 
 verify-pdev.cmd
 ```
 
-または VSCode のターミナルで個別に確認します。
+`Create-PortableDev.ps1` は `start-pdev.cmd` と `verify-pdev.cmd` を作成した後、以下と同等の動作確認も実行します。
+動作確認の詳細ログは `.local\tmp\verify-pdev.log` に出力されます。
+VSCode のターミナルで個別に確認する場合も同じ内容を使えます。
 
 ```powershell
 Write-Host @"
@@ -112,69 +120,60 @@ pandoc : $(pandoc --version)
 ## 事前インストールされる VSCode 拡張機能
 
 ```text
-ms-vscode-remote.vscode-remote-extensionpack
-ms-vscode-remote.remote-wsl
-ms-vscode-remote.remote-containers
-ms-vscode-remote.remote-ssh
-ms-vscode-remote.remote-ssh-edit
-ms-vscode.remote-server
-ms-vscode.remote-explorer
 zhuangtongfa.material-theme
 pkief.material-icon-theme
 hediet.vscode-drawio
 rooveterinaryinc.roo-cline
 zoocodeorganization.zoo-code
-saoudrizwan.claude-dev
-continue.continue
 shd101wyy.markdown-preview-enhanced
-yzhang.markdown-all-in-one
 bierner.markdown-mermaid
 ```
 
-拡張機能のインストールログは `.tmp\vscode-extension-install.log` に出力されます。
+拡張機能のインストールログは `.local\tmp\vscode-extension-install.log` に出力されます。
 
 ## 使い方
 
 ```powershell
-# pip
-mkdir -Force "$env:PDEV_ROOT\.tmp\pip" ; cd "$env:PDEV_ROOT\.tmp\pip"
-pip install                    glances
-pip download -d wheel          glances
-pip install --find-links=wheel glances
+### pip
+mkdir -Force "$env:PDEV_ROOT\.local\tmp\pip" ; cd "$env:PDEV_ROOT\.local\tmp\pip"
+mkdir -Force "$env:PDEV_ROOT\.local\pkgs\pip"
+pip download -d "$env:PDEV_ROOT\.local\pkgs\pip" pyfiglet
+pip install --find-links="$env:PDEV_ROOT\.local\pkgs\pip" pyfiglet
 pip list
-glances
+pyfiglet "portable pip works"
 
-# uv
-mkdir -Force "$env:PDEV_ROOT\.tmp\pip" ; cd "$env:PDEV_ROOT\.tmp\pip"
+### npm
+mkdir -Force "$env:PDEV_ROOT\.local\tmp\npm" ; cd "$env:PDEV_ROOT\.local\tmp\npm"
+mkdir -Force "$env:PDEV_ROOT\.local\pkgs\npm"
+npm pack cowsay --pack-destination "$env:PDEV_ROOT\.local\pkgs\npm"
+npm -g i (Get-ChildItem "$env:PDEV_ROOT\.local\pkgs\npm\cowsay-*.tgz" | Select-Object -First 1).FullName
+npm -g list --depth=0
+cowsay "portable npm works"
+
+### uv
+mkdir -Force "$env:PDEV_ROOT\.local\tmp\uv" ; cd "$env:PDEV_ROOT\.local\tmp\uv"
+mkdir -Force "$env:PDEV_ROOT\.local\pkgs\pip"
 uv init
 uv venv
-pip download -d wheel rich-cli
-uv add --dev --find-links=wheel rich-cli
+pip download -d "$env:PDEV_ROOT\.local\pkgs\pip" catsay-cli
+uv add --dev --find-links="$env:PDEV_ROOT\.local\pkgs\pip" catsay-cli
 uv pip list
-uv run rich "$env:PDEV_ROOT\README.md"
+uv run catsay "portable uv works"
 
-# npm
-mkdir -Force "$env:PDEV_ROOT\.tmp\npm" ; cd "$env:PDEV_ROOT\.tmp\npm"
-npm -g i   gtop
-npm pack   gtop
-npm -g i .\gtop-1.1.5.tgz
-npm -g list
-gtop
-
-# jq
+### jq
 echo '{ "name": "Alice", "age": 25 }' | jq
 
-# pandoc
-mkdir -Force "$env:PDEV_ROOT\.tmp\pandoc" ; cd "$env:PDEV_ROOT\.tmp\pandoc"
+### pandoc
+mkdir -Force "$env:PDEV_ROOT\.local\tmp\pandoc" ; cd "$env:PDEV_ROOT\.local\tmp\pandoc"
 pandoc "$env:PDEV_ROOT\README.md" -o README.html
 ```
 
 ## 参考資料
 
+- [Visual Studio Code](https://code.visualstudio.com/download)
+  - [Updates](https://code.visualstudio.com/updates)
 - [Python](https://www.python.org/downloads/windows/)
 - [Node.js](https://nodejs.org/ja/download)
 - [uv](https://github.com/astral-sh/uv)
 - [jq](https://github.com/jqlang/jq)
 - [pandoc](https://github.com/jgm/pandoc)
-- [Visual Studio Code](https://code.visualstudio.com/download)
-  - [Updates](https://code.visualstudio.com/updates)

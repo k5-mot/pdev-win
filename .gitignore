@@ -2,6 +2,7 @@
 .config/
 .tmp/
 .local/
+.home/
 start-pdev.cmd
 verify-pdev.cmd
 
