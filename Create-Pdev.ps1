@@ -92,6 +92,10 @@ $ScoopCacheDir = $TmpDir
 $VscodeConfigDir = Join-Path $ConfigDir "vscode"
 $VscodeDataDir = Join-Path $VscodeConfigDir "user-data"
 $VscodeExtDir = Join-Path $VscodeConfigDir "extensions"
+$PythonDir = Join-Path $ScoopDir "apps\python\current"
+$PythonScriptsDir = Join-Path $PythonDir "Scripts"
+$NodejsDir = Join-Path $ScoopDir "apps\nodejs\current"
+$VscodeBinDir = Join-Path $ScoopDir "apps\vscode\current\bin"
 
 if ([string]::IsNullOrWhiteSpace($StartBatPath)) {
     $StartBatPath = Join-Path $RootDir "start.bat"
@@ -213,7 +217,14 @@ function Set-PortableEnvironment {
     $env:PYTHONUSERBASE = $PythonUserBaseDir
 
     $scoopShimDir = Join-Path $ScoopDir "shims"
-    $pathItems = @($BinDir, $scoopShimDir)
+    $pathItems = @(
+        $BinDir,
+        $PythonDir,
+        $PythonScriptsDir,
+        $NodejsDir,
+        $VscodeBinDir,
+        $scoopShimDir
+    )
 
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     $currentItems = @()
@@ -346,12 +357,17 @@ function Test-PortableCommands {
     )
 
     foreach ($cmd in $commands) {
-        $resolved = Get-Command $cmd -ErrorAction SilentlyContinue
+        $resolved = Get-Command $cmd -ErrorAction SilentlyContinue | Select-Object -First 1
         if (-not $resolved) {
             throw "[NG] PATH に $cmd が見つかりません。"
         }
 
-        Write-Host "[OK] $cmd -> $($resolved.Source)"
+        $source = $resolved.Source
+        if (-not $source.StartsWith($RootDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "[NG] $cmd がポータブル環境外を指しています: $source"
+        }
+
+        Write-Host "[OK] $cmd -> $source"
     }
 }
 
@@ -394,17 +410,21 @@ set "PDEV_ROOT=%ROOT%"
 
 set "SCOOP=%OPT%\scoop"
 set "SCOOP_CACHE=%TMP%"
-set "PATH=%BIN%;%SCOOP%\shims;%PATH%"
+set "PYTHON_HOME=%SCOOP%\apps\python\current"
+set "PYTHON_SCRIPTS=%PYTHON_HOME%\Scripts"
+set "NODEJS_HOME=%SCOOP%\apps\nodejs\current"
+set "VSCODE_BIN=%SCOOP%\apps\vscode\current\bin"
+set "PATH=%BIN%;%PYTHON_HOME%;%PYTHON_SCRIPTS%;%NODEJS_HOME%;%VSCODE_BIN%;%SCOOP%\shims;%SystemRoot%\system32;%SystemRoot%;%SystemRoot%\System32\Wbem"
 
 echo [PATH verification]
-where python || exit /b 1
-where pip || exit /b 1
-where node || exit /b 1
-where npm || exit /b 1
-where uv || exit /b 1
-where jq || exit /b 1
-where pandoc || exit /b 1
-where code || exit /b 1
+call :require_portable python || exit /b 1
+call :require_portable pip || exit /b 1
+call :require_portable node || exit /b 1
+call :require_portable npm || exit /b 1
+call :require_portable uv || exit /b 1
+call :require_portable jq || exit /b 1
+call :require_portable pandoc || exit /b 1
+call :require_portable code || exit /b 1
 
 echo.
 echo [versions]
@@ -422,6 +442,17 @@ echo [start vscode]
 start "" code --user-data-dir "%CONFIG%\vscode\user-data" --extensions-dir "%CONFIG%\vscode\extensions"
 
 endlocal
+exit /b 0
+
+:require_portable
+for /f "delims=" %%P in ('where %1 2^>nul') do (
+    echo %%P | findstr /I /B /C:"%ROOT%\\" >nul && (
+        echo %%P
+        exit /b 0
+    )
+)
+echo [NG] %1 was not found under %ROOT%.
+exit /b 1
 "@
 
     Set-Content -Path $StartBat -Value $content -Encoding ASCII
