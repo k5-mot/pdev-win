@@ -108,7 +108,7 @@ C:\path\to\pdev
 
 | ツール | 既定バージョン | 補足 |
 | --- | --- | --- |
-| Visual Studio Code | `1.100.2` | 起動時に専用 user-data-dir と extensions-dir を指定する |
+| Visual Studio Code | `1.121.0` | 起動時に専用 user-data-dir と extensions-dir を指定する |
 | Python | `3.12.10` | `python`、`pip` が利用できること |
 | Node.js | `22.16.0` | `node`、`npm` が利用できること |
 | uv | `0.7.8` | Python パッケージ管理用 |
@@ -127,7 +127,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Create-Pdev.ps1 `
   -UvVersion 0.7.8 `
   -JqVersion 1.7.1 `
   -PandocVersion 3.7.0.2 `
-  -VscodeVersion 1.100.2
+  -VscodeVersion 1.121.0
 ```
 
 指定されたバージョンが取得できない場合は、理由をログに出力し、非ゼロ終了コードで失敗すること。
@@ -152,7 +152,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Create-Pdev.ps1 `
 | `UvVersion` | 任意 | `0.7.8` | インストールする uv のバージョン |
 | `JqVersion` | 任意 | `1.7.1` | インストールする jq のバージョン |
 | `PandocVersion` | 任意 | `3.7.0.2` | インストールする pandoc のバージョン |
-| `VscodeVersion` | 任意 | `1.100.2` | インストールする Visual Studio Code のバージョン |
+| `VscodeVersion` | 任意 | `1.121.0` | インストールする Visual Studio Code のバージョン |
 | `StartBatPath` | 任意 | `InstallRoot\start.bat` | 生成する起動バッチファイルのパス |
 | `Force` | 任意 | `false` | 既存ファイルがある場合に上書きまたは再インストールを許可する |
 

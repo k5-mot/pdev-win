@@ -44,7 +44,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Create-Pdev.ps1 `
   -UvVersion 0.7.8 `
   -JqVersion 1.7.1 `
   -PandocVersion 3.7.0.2 `
-  -VscodeVersion 1.100.2 `
+  -VscodeVersion 1.121.0 `
   -StartBatPath "$env:USERPROFILE\Desktop\pdev\start.bat"
 ```
 
@@ -54,7 +54,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Create-Pdev.ps1 `
 
 | ツール | 既定バージョン |
 | --- | --- |
-| Visual Studio Code | `1.100.2` |
+| Visual Studio Code | `1.121.0` |
 | Python | `3.12.10` |
 | Node.js | `22.16.0` |
 | uv | `0.7.8` |
