@@ -45,6 +45,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Create-Pdev.ps1 `
   -JqVersion 1.7.1 `
   -PandocVersion 3.7.0.2 `
   -VscodeVersion 1.121.0 `
+  -AdditionalTools ripgrep,fd,bat,delta,curl,lazygit,neovim,yq,hyperfine,rustup `
   -StartBatPath "$env:USERPROFILE\Desktop\pdev\start.bat"
 ```
 
@@ -60,6 +61,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Create-Pdev.ps1 `
 | uv | `0.7.8` |
 | jq | `1.7.1` |
 | pandoc | `3.7.0.2` |
+
+追加で次の Scoop ツールも最新 manifest からインストールします。
+
+```text
+ripgrep
+fd
+bat
+delta
+curl
+lazygit
+neovim
+yq
+hyperfine
+rustup
+```
 
 ## 起動
 

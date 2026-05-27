@@ -115,6 +115,21 @@ C:\path\to\pdev
 | jq | `1.7.1` | JSON 処理用 |
 | pandoc | `3.7.0.2` | ドキュメント変換用 |
 
+追加で次の開発支援ツールを Scoop の最新 manifest からインストールする。
+
+| ツール | コマンド | 補足 |
+| --- | --- | --- |
+| ripgrep | `rg` | 高速テキスト検索 |
+| fd | `fd` | 高速ファイル検索 |
+| bat | `bat` | シンタックスハイライト付きファイル表示 |
+| delta | `delta` | Git diff 表示支援 |
+| curl | `curl` | HTTP クライアント |
+| lazygit | `lazygit` | Git TUI |
+| neovim | `nvim` | エディタ |
+| yq | `yq` | YAML/JSON 処理 |
+| hyperfine | `hyperfine` | ベンチマーク |
+| rustup | `rustup` | Rust toolchain 管理 |
+
 ### 6.1 バージョン指定
 
 インストール対象ツールのバージョンは、引数で上書きできること。
@@ -153,6 +168,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Create-Pdev.ps1 `
 | `JqVersion` | 任意 | `1.7.1` | インストールする jq のバージョン |
 | `PandocVersion` | 任意 | `3.7.0.2` | インストールする pandoc のバージョン |
 | `VscodeVersion` | 任意 | `1.121.0` | インストールする Visual Studio Code のバージョン |
+| `AdditionalTools` | 任意 | `ripgrep,fd,bat,delta,curl,lazygit,neovim,yq,hyperfine,rustup` | 追加インストールする Scoop ツール |
 | `StartBatPath` | 任意 | `InstallRoot\start.bat` | 生成する起動バッチファイルのパス |
 | `Force` | 任意 | `false` | 既存ファイルがある場合に上書きまたは再インストールを許可する |
 
@@ -211,6 +227,16 @@ npm
 uv
 jq
 pandoc
+rg
+fd
+bat
+delta
+curl
+lazygit
+nvim
+yq
+hyperfine
+rustup
 ```
 
 ### 8.4 設定とキャッシュの閉じ込め
@@ -264,6 +290,16 @@ npm
 uv
 jq
 pandoc
+rg
+fd
+bat
+delta
+curl
+lazygit
+nvim
+yq
+hyperfine
+rustup
 ```
 
 解決先が `InstallRoot` 配下ではない場合は、警告またはエラーとして扱う。
@@ -335,6 +371,7 @@ code ^
 - `InstallRoot` 配下に必要なディレクトリが作成されている。
 - Scoop または代替パッケージマネージャが `InstallRoot` 配下に配置されている。
 - 指定されたバージョンの Visual Studio Code、Python、Node.js、uv、jq、pandoc がインストールされている。
+- ripgrep、fd、bat、delta、curl、lazygit、neovim、yq、hyperfine、rustup がインストールされている。
 - `start.bat` が生成されている。
 - `start.bat` 実行時に PATH と主要環境変数が `InstallRoot` 配下を向く。
 - `start.bat` から VS Code が起動できる。
