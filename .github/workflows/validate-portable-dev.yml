@@ -1,0 +1,108 @@
+name: Validate Portable Dev Bootstrap
+
+on:
+  push:
+    paths:
+      - "setup.ps1"
+      - ".github/workflows/validate-portable-dev.yml"
+  pull_request:
+    paths:
+      - "setup.ps1"
+      - ".github/workflows/validate-portable-dev.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validate on Windows PowerShell
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare allowed workspace
+        run: |
+          $target = Join-Path $env:USERPROFILE 'Desktop\pdev-win'
+          if (Test-Path -LiteralPath $target) {
+            Remove-Item -LiteralPath $target -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Path $target | Out-Null
+          Copy-Item -LiteralPath '.\setup.ps1' -Destination $target -Force
+          Copy-Item -LiteralPath '.\README.md' -Destination $target -Force
+          Copy-Item -LiteralPath '.\.github' -Destination $target -Recurse -Force
+
+          "PDEV_WORKSPACE=$target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PDEV_ROOT=$target\pdev" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Confirm Windows PowerShell
+        run: |
+          $PSVersionTable
+          if ($PSVersionTable.PSEdition -ne 'Desktop') {
+            throw "This workflow must run on Windows PowerShell, not pwsh."
+          }
+
+      - name: Parse setup.ps1
+        working-directory: ${{ env.PDEV_WORKSPACE }}
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path '.\setup.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          ) > $null
+
+          if ($errors) {
+            $errors | ForEach-Object {
+              Write-Error ("{0}:{1}" -f $_.Extent.StartLineNumber, $_.Message)
+            }
+            exit 1
+          }
+
+      - name: Bootstrap portable dev environment
+        working-directory: ${{ env.PDEV_WORKSPACE }}
+        run: |
+          .\setup.ps1 -Root $env:PDEV_ROOT -Force
+
+      - name: Verify expected layout
+        working-directory: ${{ env.PDEV_ROOT }}
+        run: |
+          $requiredPaths = @(
+            '.local\opt\python\python.exe',
+            '.local\opt\nodejs\node.exe',
+            '.local\opt\uv\uv.exe',
+            '.local\opt\jq\jq.exe',
+            '.local\opt\pandoc\pandoc.exe',
+            '.local\opt\vscode\Code.exe',
+            '.local\opt\vscode\bin\code.cmd',
+            '.local\opt\vscode\data\user-data\User\settings.json',
+            '.local\opt\vscode\data\extensions',
+            '.local\opt\cygwin\bin\bash.exe',
+            '.config\pip\pip.ini',
+            '.local\pkg',
+            '.local\tmp',
+            '.local\logs',
+            'VSCode.bat',
+            'Cygwin.bat'
+          )
+
+          foreach ($path in $requiredPaths) {
+            if (-not (Test-Path -LiteralPath $path)) {
+              throw "Missing expected path: $path"
+            }
+          }
+
+      - name: Upload setup logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-dev-logs
+          path: |
+            ${{ env.PDEV_ROOT }}/.local/logs/*.log
+          if-no-files-found: ignore

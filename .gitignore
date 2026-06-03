@@ -1,8 +1,11 @@
 .cache/
+.config/
 .tmp/
 .local/
-start-pdev.cmd
-verify-pdev.cmd
+.home/
+pdev/
+pdev_日本語/
+pdev_日本語 空白/
 
 # Created by https://www.toptal.com/developers/gitignore/api/visualstudiocode,vim,emacs,python,node,yarn,dotenv
 # Edit at https://www.toptal.com/developers/gitignore?templates=visualstudiocode,vim,emacs,python,node,yarn,dotenv
