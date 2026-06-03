@@ -1,15 +1,3 @@
-model = "free-router"
-model_provider = "litellm"
-
-[model_providers.litellm]
-name = "LiteLLM"
-base_url = "http://litellm:4000/v1"
-env_key = "LITELLM_API_KEY"
-wire_api = "responses"
-
-[windows]
-sandbox = "unelevated"
-
 [mcp_servers.docling]
 command = "uvx"
 args = ["--no-env-file", "--from=docling-mcp", "docling-mcp-server", "--transport", "stdio"]
@@ -18,4 +6,4 @@ args = ["--no-env-file", "--from=docling-mcp", "docling-mcp-server", "--transpor
 DOCLING_SERVICE_URL = "http://docling:50000"
 DOCLING_SERVICE_API_KEY = "sk-docling-serve-api-key"
 DOCLING_CONVERSION_MODE = "remote"
-DOCLING_FALLBACK_TO_LOCAL = "true"
+DOCLING_FALLBACK_TO_LOCAL = "false"

@@ -1,4 +1,4 @@
 interface:
   display_name: "DOCX/PDF to Japanese Markdown+PNG"
-  short_description: "Convert DOCX/PDF to Japanese Markdown+PNG."
-  default_prompt: "Convert this English DOCX or PDF into Japanese Markdown+PNG."
+  short_description: "Convert DOCX/PDF to Japanese Markdown+PNG with chunking and QA."
+  default_prompt: "Convert this English DOCX or PDF into fully translated Japanese Markdown+PNG, splitting long text when needed and running translation quality checks."
