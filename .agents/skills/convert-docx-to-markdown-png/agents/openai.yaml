@@ -1,0 +1,4 @@
+interface:
+  display_name: "DOCX to Markdown+PNG"
+  short_description: "Convert DOCX files to Markdown with extracted PNG images."
+  default_prompt: "Convert this DOCX into Markdown and PNG assets."

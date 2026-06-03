@@ -1,0 +1,4 @@
+interface:
+  display_name: "PDF to Markdown+PNG"
+  short_description: "Convert PDF files to Markdown with page PNG images."
+  default_prompt: "Convert this PDF into Markdown and PNG assets."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Markdown+PNG to Japanese"
+  short_description: "Translate Markdown+PNG assets to Japanese."
+  default_prompt: "Translate this English Markdown+PNG package into Japanese."

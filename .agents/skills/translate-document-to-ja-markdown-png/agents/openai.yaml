@@ -1,0 +1,4 @@
+interface:
+  display_name: "DOCX/PDF to Japanese Markdown+PNG"
+  short_description: "Convert DOCX/PDF to Japanese Markdown+PNG."
+  default_prompt: "Convert this English DOCX or PDF into Japanese Markdown+PNG."
