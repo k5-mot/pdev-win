@@ -1,458 +1,753 @@
-param(
-    [Parameter(Mandatory = $true)]
-    [ValidateNotNullOrEmpty()]
-    [string]$InstallRoot,
+﻿<#
+.SYNOPSIS
+  Desktop 配下だけに Python / Node.js / pip / uv / jq / pandoc / VS Code / Cygwin をポータブル配置する。
 
-    [string]$PythonVersion = '3.12.10',
-    [string]$NodejsVersion = '22.16.0',
-    [string]$UvVersion = '0.7.8',
-    [string]$JqVersion = '1.7.1',
-    [string]$PandocVersion = '3.7.0.2',
-    [string]$VscodeVersion = '1.100.2',
-    [string]$StartBatPath,
-    [switch]$Force
+.DESCRIPTION
+  既定配置:
+    %USERPROFILE%\Desktop\portable-dev\
+      .local\opt\{python,nodejs,uv,jq,pandoc,vscode,cygwin}\  展開済みバイナリ
+      .local\pkg\                                              ダウンロードキャッシュ
+      .local\logs\                                             実行ログ
+      .local\tmp\                                              一時展開先
+      .config\                                                  設定・ユーザーデータ
+      VSCode.bat                                                VS Code 起動コマンド
+      Cygwin.bat                                                Cygwin 起動コマンド
+
+.NOTES
+  - 管理者権限不要を想定。
+  - pip は get-pip.py ではなく pip wheel を PyPI から取得してインストールする。
+  - Cygwin は公式 setup-x86_64.exe を CLI 実行する。Cygwin は rolling distribution のため、任意の過去バージョン固定は公式 setup だけでは保証しない。
+  - Desktop 配下以外を指定した場合は停止する。
+#>
+
+[CmdletBinding()]
+param(
+  [Parameter(Mandatory)]
+  [string]$Root,
+
+  # Python embeddable zip のバージョン
+#   [string]$PythonVersion = '3.13.13',
+  [string]$PythonVersion = '3.12.10',
+
+  # Node.js Windows x64 zip のバージョン。v は付けても付けなくてもよい。
+  [string]$NodeVersion = '24.16.0',
+
+  # uv GitHub release のバージョン。v は付けても付けなくてもよい。
+  [string]$UvVersion = '0.11.18',
+
+  # jq GitHub release のバージョン。jq- は付けても付けなくてもよい。
+  [string]$JqVersion = '1.8.0',
+
+  # pandoc GitHub release のバージョン
+  [string]$PandocVersion = '3.9.0.2',
+
+  # VS Code archive の品質。stable / insiders を想定。
+  [string]$VSCodeVersion = 'stable',
+
+  # Cygwin は setup executable で最新パッケージを導入する。
+  [string]$CygwinPackages = 'bash,coreutils,curl,git,openssh,vim,nano,make,gcc-core,gcc-g++,tmux',
+
+  [switch]$Force
 )
 
-Set-StrictMode -Version 2.0
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 
-function Resolve-FullPath {
-    param([Parameter(Mandatory = $true)][string]$Path)
+# --- パス定義 ---------------------------------------------------------------
+$DesktopRoot = [Environment]::GetFolderPath('Desktop')
+$Root = [IO.Path]::GetFullPath($Root)
+$PkgDir = Join-Path $Root '.local/pkg'
+$OptDir = Join-Path $Root '.local/opt'
+$ConfigDir = Join-Path $Root '.config'
+$LogDir = Join-Path $Root '.local/logs'
+$TmpDir = Join-Path $Root '.local/tmp'
+$LogFile = Join-Path $LogDir ('install-{0:yyyyMMdd-HHmmss}.log' -f (Get-Date))
+$CygwinSetupUrl = 'https://cygwin.com/setup-x86_64.exe'
+$CygwinMirrors = @(
+  'https://ftp.jaist.ac.jp/pub/cygwin/',
+  'https://ftp.yamagata-u.ac.jp/pub/cygwin/',
+  'https://ftp.iij.ad.jp/pub/cygwin/'
+)
+$CygwinFallbackMirror = 'https://mirrors.kernel.org/sourceware/cygwin/'
 
-    $unresolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
-    return [System.IO.Path]::GetFullPath($unresolved)
+# --- ログ関数 ---------------------------------------------------------------
+function Write-Log {
+  <#
+  .SYNOPSIS
+    色、絵文字、時刻付きで進捗を表示し、ログファイルへ書き込みます。
+
+  .PARAMETER Message
+    出力するログメッセージです。
+
+  .PARAMETER Level
+    ログの種類です。
+  #>
+  param(
+    [Parameter(Mandatory)] [string]$Message,
+    [ValidateSet('INFO','OK','WARN','ERROR','STEP')] [string]$Level = 'INFO'
+  )
+  $stamp = Get-Date -Format 'HH:mm:ss'
+  $map = @{
+    INFO  = @{ Emoji=([char]0x2139).ToString(); Color='Cyan' }
+    OK    = @{ Emoji=([char]0x2705).ToString(); Color='Green' }
+    WARN  = @{ Emoji=([char]0x26A0).ToString(); Color='Yellow' }
+    ERROR = @{ Emoji=([char]0x274C).ToString(); Color='Red' }
+    STEP  = @{ Emoji=[char]::ConvertFromUtf32(0x1F680); Color='Magenta' }
+  }
+  $line = "[$stamp] $($map[$Level].Emoji) [$Level] $Message"
+  Write-Host $line -ForegroundColor $map[$Level].Color
+  if (Test-Path $LogDir) { Add-Content -LiteralPath $LogFile -Value $line -Encoding UTF8 }
+}
+
+function Assert-UnderDesktop {
+  <#
+  .SYNOPSIS
+    指定されたパスが Desktop 配下にあることを検証します。
+
+  .PARAMETER Path
+    検証対象のパスです。
+  #>
+  param([Parameter(Mandatory)][string]$Path)
+  $full = [IO.Path]::GetFullPath($Path)
+  $desktopFull = [IO.Path]::GetFullPath($DesktopRoot)
+  if (-not $full.StartsWith($desktopFull, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "配置先は Desktop 配下に限定されています: $full"
+  }
 }
 
 function New-Directory {
-    param([Parameter(Mandatory = $true)][string]$Path)
+  <#
+  .SYNOPSIS
+    存在しないディレクトリを作成します。
 
-    if (-not (Test-Path -LiteralPath $Path)) {
-        New-Item -ItemType Directory -Path $Path -Force | Out-Null
-        Write-Log "Created directory: $Path"
-    } else {
-        Write-Log "Directory exists: $Path"
-    }
+  .PARAMETER Path
+    作成するディレクトリのパスです。
+  #>
+  param([Parameter(Mandatory)][string]$Path)
+  if (-not (Test-Path -LiteralPath $Path)) {
+    New-Item -ItemType Directory -Force -Path $Path | Out-Null
+  }
 }
 
-function Write-Log {
-    param([Parameter(Mandatory = $true)][string]$Message)
+function Download-FileCached {
+  <#
+  .SYNOPSIS
+    ファイルを .local/pkg にキャッシュしながらダウンロードします。
 
-    $line = '{0} {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message
-    Write-Host $line
-    if ($script:LogPath) {
-        Add-Content -LiteralPath $script:LogPath -Value $line -Encoding UTF8
-    }
-}
+  .PARAMETER Url
+    ダウンロード元 URL です。
 
-function Fail {
-    param([Parameter(Mandatory = $true)][string]$Message)
+  .PARAMETER FileName
+    キャッシュに保存するファイル名です。
 
-    Write-Log "ERROR: $Message"
-    throw $Message
-}
-
-function Invoke-LoggedCommand {
-    param(
-        [Parameter(Mandatory = $true)][scriptblock]$ScriptBlock,
-        [Parameter(Mandatory = $true)][string]$Description
-    )
-
-    Write-Log "Running: $Description"
-    $output = & $ScriptBlock 2>&1
-    $exitCode = $LASTEXITCODE
-    $output | ForEach-Object {
-        Write-Log ("  {0}" -f $_)
-    }
-
-    if ($exitCode -ne 0) {
-        Fail "$Description failed with exit code $exitCode"
-    }
-}
-
-function Invoke-Scoop {
-    param([Parameter(Mandatory = $true)][string[]]$Arguments)
-
-    if (-not (Test-Path -LiteralPath $script:ScoopPs1)) {
-        Fail "Scoop command was not found: $script:ScoopPs1"
-    }
-
-    Invoke-LoggedCommand -Description ("scoop {0}" -f ($Arguments -join ' ')) -ScriptBlock ({
-        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script:ScoopPs1 @Arguments
-    }.GetNewClosure())
-}
-
-function Get-CommandOutput {
-    param([Parameter(Mandatory = $true)][scriptblock]$ScriptBlock)
-
-    $output = & $ScriptBlock 2>&1
-    $exitCode = $LASTEXITCODE
-    return [pscustomobject]@{
-        Output = @($output)
-        ExitCode = $exitCode
-    }
-}
-
-function Test-VersionLine {
-    param(
-        [Parameter(Mandatory = $true)][string]$Name,
-        [Parameter(Mandatory = $true)][scriptblock]$ScriptBlock,
-        [Parameter(Mandatory = $true)][string]$ExpectedVersion
-    )
-
-    $result = Get-CommandOutput -ScriptBlock $ScriptBlock
-    if ($result.ExitCode -ne 0) {
-        Fail "$Name version check failed with exit code $($result.ExitCode): $($result.Output -join ' ')"
-    }
-
-    $text = ($result.Output -join "`n")
-    Write-Log "$Name version output: $($text -replace "`r?`n", ' | ')"
-    if ($text -notmatch [regex]::Escape($ExpectedVersion)) {
-        Fail "$Name expected version $ExpectedVersion was not found in output: $text"
-    }
-}
-
-function Backup-UserEnvironment {
-    $names = @('Path', 'SCOOP', 'SCOOP_GLOBAL', 'SCOOP_CACHE')
-    $backup = @{}
-    foreach ($name in $names) {
-        $backup[$name] = [Environment]::GetEnvironmentVariable($name, 'User')
-    }
-    return $backup
-}
-
-function Restore-UserEnvironment {
-    param([Parameter(Mandatory = $true)]$Backup)
-
-    foreach ($name in $Backup.Keys) {
-        $current = [Environment]::GetEnvironmentVariable($name, 'User')
-        if ($current -ne $Backup[$name]) {
-            Write-Log "Restoring user environment variable: $name"
-            [Environment]::SetEnvironmentVariable($name, $Backup[$name], 'User')
-        }
-    }
-}
-
-function Set-PortableProcessEnvironment {
-    $env:SCOOP = $script:ScoopRoot
-    $env:SCOOP_GLOBAL = $script:ScoopGlobalRoot
-    $env:SCOOP_CACHE = Join-Path $script:CacheRoot 'scoop'
-    $env:XDG_CONFIG_HOME = $script:ConfigRoot
-    $env:HOME = $script:HomeRoot
-    $env:USERPROFILE = $script:HomeRoot
-    $env:APPDATA = Join-Path $script:AppDataRoot 'Roaming'
-    $env:LOCALAPPDATA = Join-Path $script:AppDataRoot 'Local'
-    $env:TEMP = $script:TmpRoot
-    $env:TMP = $script:TmpRoot
-    $env:PIP_CONFIG_FILE = Join-Path $script:PipConfigRoot 'pip.ini'
-    $env:PIP_CACHE_DIR = Join-Path $script:CacheRoot 'pip'
-    $env:PYTHONUSERBASE = Join-Path $script:LocalRoot 'python-userbase'
-    $env:npm_config_cache = Join-Path $script:CacheRoot 'npm'
-    $env:npm_config_prefix = Join-Path $script:LocalRoot 'npm-prefix'
-    $env:UV_CACHE_DIR = Join-Path $script:CacheRoot 'uv'
-
-    $pathParts = @(
-        (Join-Path $script:ScoopRoot 'shims'),
-        (Join-Path $env:npm_config_prefix 'bin'),
-        $env:Path
-    ) | Where-Object { $_ }
-    $env:Path = ($pathParts -join [IO.Path]::PathSeparator)
-}
-
-function Install-ScoopIfNeeded {
-    if (Test-Path -LiteralPath $script:ScoopPs1) {
-        Write-Log "Scoop already exists: $script:ScoopPs1"
-        if ($Force) {
-            Invoke-Scoop -Arguments @('update', 'scoop')
-        }
-        return
-    }
-
-    $installerPath = Join-Path $script:TmpRoot 'install-scoop.ps1'
-    Write-Log "Downloading Scoop installer: $installerPath"
-    Invoke-WebRequest -Uri 'https://get.scoop.sh' -OutFile $installerPath -UseBasicParsing
-
-    $args = @(
-        '-NoProfile',
-        '-ExecutionPolicy', 'Bypass',
-        '-File', $installerPath,
-        '-ScoopDir', $script:ScoopRoot,
-        '-ScoopGlobalDir', $script:ScoopGlobalRoot,
-        '-ScoopCacheDir', (Join-Path $script:CacheRoot 'scoop')
-    )
-
-    Invoke-LoggedCommand -Description 'install Scoop' -ScriptBlock ({
-        & powershell.exe @args
-    }.GetNewClosure())
-
-    if (-not (Test-Path -LiteralPath $script:ScoopPs1)) {
-        Fail "Scoop installation did not create $script:ScoopPs1"
-    }
-}
-
-function Initialize-ScoopConfig {
-    Invoke-Scoop -Arguments @('config', 'cache_path', (Join-Path $script:CacheRoot 'scoop'))
-    Invoke-Scoop -Arguments @('config', 'show_update_log', 'false')
-
-    Invoke-Scoop -Arguments @('bucket', 'known')
-    $bucketList = Get-CommandOutput -ScriptBlock {
-        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script:ScoopPs1 bucket list
-    }
-    $bucketText = $bucketList.Output -join "`n"
-    if ($bucketText -notmatch '(^|\s)extras(\s|$)') {
-        Invoke-Scoop -Arguments @('bucket', 'add', 'extras')
-    } else {
-        Write-Log 'Scoop bucket exists: extras'
-    }
-}
-
-function Install-ScoopAppVersion {
-    param(
-        [Parameter(Mandatory = $true)][string]$App,
-        [Parameter(Mandatory = $true)][string]$Version
-    )
-
-    $appRoot = Join-Path (Join-Path $script:ScoopRoot 'apps') $App
-    $versionRoot = Join-Path $appRoot $Version
-    if ((Test-Path -LiteralPath $versionRoot) -and (-not $Force)) {
-        Write-Log "$App $Version already exists; reusing."
-        Invoke-Scoop -Arguments @('reset', $App)
-        return
-    }
-
-    if ((Test-Path -LiteralPath (Join-Path $appRoot 'current')) -and (-not (Test-Path -LiteralPath $versionRoot))) {
-        Write-Log "$App is installed at a different version; uninstalling before installing $Version."
-        Invoke-Scoop -Arguments @('uninstall', $App)
-    } elseif ($Force -and (Test-Path -LiteralPath $appRoot)) {
-        Write-Log "Force requested; uninstalling $App before reinstall."
-        Invoke-Scoop -Arguments @('uninstall', $App)
-    }
-
-    Invoke-Scoop -Arguments @('install', "$App@$Version")
-}
-
-function Write-ConfigFiles {
-    $pipIni = Join-Path $script:PipConfigRoot 'pip.ini'
-    $pipCache = Join-Path $script:CacheRoot 'pip'
-    if ((-not (Test-Path -LiteralPath $pipIni)) -or $Force) {
-        @(
-            '[global]',
-            "cache-dir = $pipCache",
-            'disable-pip-version-check = true'
-        ) | Set-Content -LiteralPath $pipIni -Encoding UTF8
-        Write-Log "Wrote pip config: $pipIni"
-    }
-
-    $npmrc = Join-Path $script:NpmConfigRoot 'npmrc'
-    if ((-not (Test-Path -LiteralPath $npmrc)) -or $Force) {
-        @(
-            "cache=$($env:npm_config_cache)",
-            "prefix=$($env:npm_config_prefix)"
-        ) | Set-Content -LiteralPath $npmrc -Encoding UTF8
-        Write-Log "Wrote npm config: $npmrc"
-    }
-
-    $uvConfig = Join-Path $script:UvConfigRoot 'uv.toml'
-    if ((-not (Test-Path -LiteralPath $uvConfig)) -or $Force) {
-        @(
-            '# uv is configured through UV_CACHE_DIR in start.bat.',
-            "# cache-dir = `"$($env:UV_CACHE_DIR.Replace('\', '\\'))`""
-        ) | Set-Content -LiteralPath $uvConfig -Encoding UTF8
-        Write-Log "Wrote uv config placeholder: $uvConfig"
-    }
-}
-
-function Test-InstalledCommands {
-    Test-VersionLine -Name 'VS Code' -ExpectedVersion $VscodeVersion -ScriptBlock { & code --version }
-    Test-VersionLine -Name 'Python' -ExpectedVersion $PythonVersion -ScriptBlock { & python --version }
-    Test-VersionLine -Name 'Node.js' -ExpectedVersion $NodejsVersion -ScriptBlock { & node --version }
-    Test-VersionLine -Name 'uv' -ExpectedVersion $UvVersion -ScriptBlock { & uv --version }
-    Test-VersionLine -Name 'jq' -ExpectedVersion $JqVersion -ScriptBlock { & jq --version }
-    Test-VersionLine -Name 'pandoc' -ExpectedVersion $PandocVersion -ScriptBlock { & pandoc --version }
-
-    $pipResult = Get-CommandOutput -ScriptBlock { & pip --version }
-    if ($pipResult.ExitCode -ne 0) {
-        Fail "pip version check failed with exit code $($pipResult.ExitCode): $($pipResult.Output -join ' ')"
-    }
-    Write-Log "pip version output: $($pipResult.Output -join ' | ')"
-}
-
-function Write-StartBatch {
-    $batchPath = $script:StartBatFullPath
-    $batchDir = Split-Path -Parent $batchPath
-    New-Directory -Path $batchDir
-
-    $content = @'
-@echo off
-setlocal EnableExtensions EnableDelayedExpansion
-
-set "INSTALL_ROOT=%~dp0"
-if "%INSTALL_ROOT:~-1%"=="\" set "INSTALL_ROOT=%INSTALL_ROOT:~0,-1%"
-
-set "SCOOP=%INSTALL_ROOT%\.local\scoop"
-set "SCOOP_GLOBAL=%INSTALL_ROOT%\.local\scoop-global"
-set "SCOOP_CACHE=%INSTALL_ROOT%\.cache\scoop"
-set "HOME=%INSTALL_ROOT%\.local\home"
-set "USERPROFILE=%INSTALL_ROOT%\.local\home"
-set "APPDATA=%INSTALL_ROOT%\.config\AppData\Roaming"
-set "LOCALAPPDATA=%INSTALL_ROOT%\.config\AppData\Local"
-set "TEMP=%INSTALL_ROOT%\.local\tmp"
-set "TMP=%INSTALL_ROOT%\.local\tmp"
-set "PIP_CONFIG_FILE=%INSTALL_ROOT%\.config\pip\pip.ini"
-set "PIP_CACHE_DIR=%INSTALL_ROOT%\.cache\pip"
-set "PYTHONUSERBASE=%INSTALL_ROOT%\.local\python-userbase"
-set "npm_config_cache=%INSTALL_ROOT%\.cache\npm"
-set "npm_config_prefix=%INSTALL_ROOT%\.local\npm-prefix"
-set "UV_CACHE_DIR=%INSTALL_ROOT%\.cache\uv"
-set "XDG_CONFIG_HOME=%INSTALL_ROOT%\.config"
-
-set "PATH=%SCOOP%\shims;%npm_config_prefix%\bin;%PATH%"
-
-for %%D in ("%HOME%" "%APPDATA%" "%LOCALAPPDATA%" "%TEMP%" "%PIP_CACHE_DIR%" "%npm_config_cache%" "%npm_config_prefix%" "%UV_CACHE_DIR%" "%INSTALL_ROOT%\.config\vscode\user-data" "%INSTALL_ROOT%\.config\vscode\extensions") do (
-  if not exist "%%~D" mkdir "%%~D" >nul 2>nul
-)
-
-set "FAILED_REQUIRED=0"
-for %%C in (code python pip node npm uv jq pandoc) do (
-  set "FOUND="
-  for /f "delims=" %%P in ('where %%C 2^>nul') do if not defined FOUND set "FOUND=%%P"
-  if not defined FOUND (
-    echo ERROR: %%C was not found on PATH.
-    if /I "%%C"=="code" set "FAILED_REQUIRED=1"
-    if /I "%%C"=="python" set "FAILED_REQUIRED=1"
-    if /I "%%C"=="node" set "FAILED_REQUIRED=1"
-  ) else (
-    echo %%C: !FOUND!
-    set "OUTSIDE=!FOUND:%INSTALL_ROOT%=!"
-    if /I "!OUTSIDE!"=="!FOUND!" (
-      echo WARNING: %%C resolved outside INSTALL_ROOT.
-      if /I "%%C"=="code" set "FAILED_REQUIRED=1"
-      if /I "%%C"=="python" set "FAILED_REQUIRED=1"
-      if /I "%%C"=="node" set "FAILED_REQUIRED=1"
-    )
+  .OUTPUTS
+    ダウンロードまたはキャッシュ済みファイルのパスを返します。
+  #>
+  param(
+    [Parameter(Mandatory)][string]$Url,
+    [Parameter(Mandatory)][string]$FileName
   )
-)
-
-if not "%FAILED_REQUIRED%"=="0" (
-  echo ERROR: required commands must resolve from %INSTALL_ROOT%.
-  exit /b 1
-)
-
-code ^
-  --user-data-dir "%INSTALL_ROOT%\.config\vscode\user-data" ^
-  --extensions-dir "%INSTALL_ROOT%\.config\vscode\extensions" ^
-  --no-sandbox ^
-  --disable-gpu
-
-exit /b %ERRORLEVEL%
-'@
-
-    Set-Content -LiteralPath $batchPath -Value $content -Encoding ASCII
-    Write-Log "Wrote start batch: $batchPath"
+  $dest = Join-Path $PkgDir $FileName
+  if ((Test-Path -LiteralPath $dest) -and (-not $Force)) {
+    Write-Log "キャッシュ利用: $FileName" 'OK'
+    return $dest
+  }
+  Write-Log "ダウンロード: $Url" 'INFO'
+  Invoke-WebRequest -Uri $Url -OutFile $dest -UseBasicParsing
+  return $dest
 }
 
-$script:LogPath = $null
-$userEnvBackup = $null
+function Download-FirstAvailableCached {
+  <#
+  .SYNOPSIS
+    候補 URL のうち最初に取得できるファイルを .local/pkg にキャッシュします。
+
+  .PARAMETER Candidates
+    Url と FileName を含む候補オブジェクトの一覧です。
+
+  .PARAMETER ErrorMessage
+    すべての候補が取得できない場合に表示するエラーメッセージです。
+
+  .OUTPUTS
+    ダウンロードまたはキャッシュ済みファイルのパスを返します。
+  #>
+  param(
+    [Parameter(Mandatory)][object[]]$Candidates,
+    [Parameter(Mandatory)][string]$ErrorMessage
+  )
+
+  foreach ($candidate in $Candidates) {
+    try {
+      return Download-FileCached $candidate.Url $candidate.FileName
+    } catch {
+      Write-Log "取得不可: $($candidate.Url) ($($_.Exception.Message))" 'WARN'
+    }
+  }
+
+  throw $ErrorMessage
+}
+
+function Expand-ZipClean {
+  <#
+  .SYNOPSIS
+    zip を展開し、単一ルートフォルダの場合は中身だけを配置します。
+
+  .PARAMETER ZipPath
+    展開する zip ファイルのパスです。
+
+  .PARAMETER Destination
+    展開先ディレクトリです。
+  #>
+  param(
+    [Parameter(Mandatory)][string]$ZipPath,
+    [Parameter(Mandatory)][string]$Destination
+  )
+  $tmp = Join-Path $TmpDir ('portable-dev-' + [guid]::NewGuid().ToString('N'))
+  if (Test-Path -LiteralPath $Destination) {
+    Remove-Item -LiteralPath $Destination -Recurse -Force
+  }
+  New-Directory $Destination
+  New-Directory $tmp
+  try {
+    Expand-Archive -LiteralPath $ZipPath -DestinationPath $tmp -Force
+    $items = @(Get-ChildItem -LiteralPath $tmp)
+    if ($items.Count -eq 1 -and $items[0].PSIsContainer) {
+      Copy-Item -Path (Join-Path $items[0].FullName '*') -Destination $Destination -Recurse -Force
+    } else {
+      Copy-Item -Path (Join-Path $tmp '*') -Destination $Destination -Recurse -Force
+    }
+  } finally {
+    Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function Invoke-Checked {
+  <#
+  .SYNOPSIS
+    外部コマンドを実行し、終了コードが 0 以外の場合に例外を送出します。
+
+  .PARAMETER FilePath
+    実行するファイルのパスです。
+
+  .PARAMETER Arguments
+    実行ファイルに渡す引数です。
+
+  .PARAMETER WorkingDirectory
+    実行時の作業ディレクトリです。
+  #>
+  param(
+    [Parameter(Mandatory)][string]$FilePath,
+    [string[]]$Arguments = @(),
+    [string]$WorkingDirectory = $Root
+  )
+  Write-Log "実行: $FilePath $($Arguments -join ' ')" 'INFO'
+  $p = Start-Process -FilePath $FilePath -ArgumentList $Arguments -WorkingDirectory $WorkingDirectory -Wait -PassThru -NoNewWindow
+  if ($p.ExitCode -ne 0) { throw "コマンド失敗 ExitCode=$($p.ExitCode): $FilePath" }
+}
+
+function Get-VersionTag {
+  <#
+  .SYNOPSIS
+    バージョン文字列に v 接頭辞を付けたタグ形式へ整形します。
+
+  .PARAMETER Version
+    整形するバージョン文字列です。
+
+  .OUTPUTS
+    v 接頭辞付きのバージョンタグを返します。
+  #>
+  param([Parameter(Mandatory)][string]$Version)
+  if ($Version.StartsWith('v')) { return $Version }
+  return "v$Version"
+}
+
+function Install-PythonEmbedded {
+  <#
+  .SYNOPSIS
+    Python embeddable zip を展開し、site-packages と pip 利用を有効化します。
+
+  .PARAMETER Destination
+    Python の配置先ディレクトリです。
+  #>
+  param([Parameter(Mandatory)][string]$Destination)
+  Write-Log "Python $PythonVersion を配置: $Destination" 'STEP'
+  $pyCompact = $PythonVersion.Replace('.', '')
+  $zip = Download-FirstAvailableCached `
+    -Candidates @(
+      [pscustomobject]@{
+        Url = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-embed-amd64.zip"
+        FileName = "python-$PythonVersion-embed-amd64.zip"
+      },
+      [pscustomobject]@{
+        Url = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-embeddable-amd64.zip"
+        FileName = "python-$PythonVersion-embeddable-amd64.zip"
+      }
+    ) `
+    -ErrorMessage "Python $PythonVersion の Windows embeddable zip が見つかりません。https://www.python.org/ftp/python/$PythonVersion/ に python-$PythonVersion-embed-amd64.zip または python-$PythonVersion-embeddable-amd64.zip があるバージョンを指定してください。"
+  Expand-ZipClean $zip $Destination
+
+  $pth = Get-ChildItem -LiteralPath $Destination -Filter 'python*._pth' | Select-Object -First 1
+  if ($null -ne $pth) {
+    # 日本語コメント: embeddable Python は既定で site import が無効なので pip 用に有効化する。
+    $content = Get-Content -LiteralPath $pth.FullName -Raw
+    $content = $content -replace '#import site', 'import site'
+    Set-Content -LiteralPath $pth.FullName -Value $content -Encoding ASCII
+  }
+
+  New-Directory (Join-Path $ConfigDir 'pip')
+  $pipIni = Join-Path $ConfigDir 'pip/pip.ini'
+  Set-Content -LiteralPath $pipIni -Encoding ASCII -Value @"
+[global]
+disable-pip-version-check = true
+"@
+}
+
+function Install-PipFromWheel {
+  <#
+  .SYNOPSIS
+    PyPI JSON から最新 pip wheel を取得し、wheel から pip をインストールします。
+
+  .PARAMETER PythonExe
+    pip を導入する Python 実行ファイルのパスです。
+  #>
+  param([Parameter(Mandatory)][string]$PythonExe)
+  Write-Log "pip wheel を取得してインストール" 'STEP'
+  $metaUrl = 'https://pypi.org/pypi/pip/json'
+  $meta = Invoke-RestMethod -Uri $metaUrl
+  $wheel = $meta.urls | Where-Object { $_.packagetype -eq 'bdist_wheel' -and $_.filename -like 'pip-*-py3-none-any.whl' } | Select-Object -First 1
+  if ($null -eq $wheel) { throw 'pip wheel が見つかりません。' }
+  $pipWheel = Download-FileCached $wheel.url $wheel.filename
+  $env:PIP_CACHE_DIR = Join-Path $PkgDir 'pip-cache'
+  $code = @"
+import sys
+sys.path.insert(0, r'$pipWheel')
+from pip._internal.cli.main import main
+raise SystemExit(main(['install', '--no-index', '--no-warn-script-location', '--force-reinstall', r'$pipWheel']))
+"@
+  & $PythonExe -c $code
+  if ($LASTEXITCODE -ne 0) { throw "pip wheel インストールに失敗しました。ExitCode=$LASTEXITCODE" }
+}
+
+function Install-NodeZip {
+  <#
+  .SYNOPSIS
+    Node.js 公式 Windows x64 zip を展開します。
+
+  .PARAMETER Destination
+    Node.js の配置先ディレクトリです。
+  #>
+  param([Parameter(Mandatory)][string]$Destination)
+  Write-Log "Node.js $NodeVersion を配置: $Destination" 'STEP'
+  $tag = Get-VersionTag $NodeVersion
+  $url = "https://nodejs.org/dist/$tag/node-$tag-win-x64.zip"
+  $zip = Download-FileCached $url "node-$tag-win-x64.zip"
+  Expand-ZipClean $zip $Destination
+}
+
+function Install-UvZip {
+  <#
+  .SYNOPSIS
+    uv の Windows x86_64 MSVC zip を展開します。
+
+  .PARAMETER Destination
+    uv の配置先ディレクトリです。
+  #>
+  param([Parameter(Mandatory)][string]$Destination)
+  Write-Log "uv $UvVersion を配置: $Destination" 'STEP'
+  $version = $UvVersion.TrimStart('v')
+  $url = "https://releases.astral.sh/github/uv/releases/download/$version/uv-x86_64-pc-windows-msvc.zip"
+  $zip = Download-FileCached $url "uv-$version-x86_64-pc-windows-msvc.zip"
+  Expand-ZipClean $zip $Destination
+}
+
+function Install-JqExe {
+  <#
+  .SYNOPSIS
+    jq の単体 exe を配置し、jq.exe 名に正規化します。
+
+  .PARAMETER Destination
+    jq の配置先ディレクトリです。
+  #>
+  param([Parameter(Mandatory)][string]$Destination)
+  Write-Log "jq $JqVersion を配置: $Destination" 'STEP'
+  New-Directory $Destination
+  $tag = if ($JqVersion.StartsWith('jq-')) { $JqVersion } else { "jq-$JqVersion" }
+  $exe = Download-FileCached "https://github.com/jqlang/jq/releases/download/$tag/jq-windows-amd64.exe" "jq-$JqVersion-windows-amd64.exe"
+  Copy-Item -LiteralPath $exe -Destination (Join-Path $Destination 'jq.exe') -Force
+}
+
+function Install-PandocZip {
+  <#
+  .SYNOPSIS
+    pandoc の Windows x86_64 zip を展開します。
+
+  .PARAMETER Destination
+    pandoc の配置先ディレクトリです。
+  #>
+  param([Parameter(Mandatory)][string]$Destination)
+  Write-Log "pandoc $PandocVersion を配置: $Destination" 'STEP'
+  $url = "https://github.com/jgm/pandoc/releases/download/$PandocVersion/pandoc-$PandocVersion-windows-x86_64.zip"
+  $zip = Download-FileCached $url "pandoc-$PandocVersion-windows-x86_64.zip"
+  Expand-ZipClean $zip $Destination
+}
+
+function Install-VSCodeZip {
+  <#
+  .SYNOPSIS
+    VS Code zip を展開し、data フォルダで portable mode を有効化します。
+
+  .PARAMETER Destination
+    VS Code の配置先ディレクトリです。
+  #>
+  param([Parameter(Mandatory)][string]$Destination)
+  Write-Log "VS Code $VSCodeVersion を配置: $Destination" 'STEP'
+  $versionSegment = if ($VSCodeVersion -in @('stable','latest')) { 'latest' } else { $VSCodeVersion }
+  $url = "https://update.code.visualstudio.com/$versionSegment/win32-x64-archive/stable"
+  $zip = Download-FileCached $url "vscode-$versionSegment-win32-x64-archive.zip"
+  Expand-ZipClean $zip $Destination
+  New-Directory (Join-Path $Destination 'data')
+  New-Directory (Join-Path $Destination 'data/user-data/User')
+  New-Directory (Join-Path $Destination 'data/extensions')
+}
+
+function Test-CygwinMirror {
+  <#
+  .SYNOPSIS
+    Cygwin mirror の setup メタデータへ到達できるか確認します。
+
+  .PARAMETER Mirror
+    確認対象の Cygwin mirror URL です。
+
+  .OUTPUTS
+    到達できる場合は True、到達できない場合は False を返します。
+  #>
+  param([Parameter(Mandatory)][string]$Mirror)
+
+  $metadataUrl = ($Mirror.TrimEnd('/') + '/x86_64/setup.xz')
+  try {
+    Invoke-WebRequest -Uri $metadataUrl -Method Head -UseBasicParsing -TimeoutSec 15 | Out-Null
+    return $true
+  } catch {
+    Write-Log "Cygwin mirror 到達不可: $Mirror ($($_.Exception.Message))" 'WARN'
+    return $false
+  }
+}
+
+function Select-CygwinMirror {
+  <#
+  .SYNOPSIS
+    国内 Cygwin mirror を優先し、全滅時に fallback mirror を選択します。
+
+  .OUTPUTS
+    選択した Cygwin mirror URL を返します。
+  #>
+  foreach ($mirror in $CygwinMirrors) {
+    if (Test-CygwinMirror $mirror) {
+      return $mirror
+    }
+  }
+
+  Write-Log "国内 Cygwin mirror に到達できないため fallback を使用: $CygwinFallbackMirror" 'WARN'
+  return $CygwinFallbackMirror
+}
+
+function Write-CygwinSetupDefaults {
+  <#
+  .SYNOPSIS
+    Cygwin setup が現在ユーザ向け、システムプロキシ設定で動くよう既定設定を書き込みます。
+
+  .PARAMETER Destination
+    Cygwin の配置先ディレクトリです。
+  #>
+  param([Parameter(Mandatory)][string]$Destination)
+
+  $setupDir = Join-Path $Destination 'etc/setup'
+  New-Directory $setupDir
+
+  # 日本語コメント: setup の旧 IE5 method は現在の "Use System Proxy Settings" 相当として扱われる。
+  Set-Content -LiteralPath (Join-Path $setupDir 'net-method') -Value 'IE5' -Encoding ASCII
+}
+
+function Install-Cygwin {
+  <#
+  .SYNOPSIS
+    Cygwin setup をサイレント実行し、Root 配下へ Cygwin を配置します。
+
+  .PARAMETER Destination
+    Cygwin の配置先ディレクトリです。
+  #>
+  param([Parameter(Mandatory)][string]$Destination)
+  Write-Log "Cygwin を配置: $Destination" 'STEP'
+  New-Directory $Destination
+  $setup = Download-FileCached $CygwinSetupUrl 'setup-x86_64.exe'
+  $localPkg = Join-Path $PkgDir 'cygwin'
+  New-Directory $localPkg
+  Write-CygwinSetupDefaults $Destination
+  $mirror = Select-CygwinMirror
+  Write-Log "Cygwin mirror: $mirror" 'INFO'
+  $args = @(
+    '--quiet-mode',
+    '--no-admin',
+    '--only-site',
+    '--root', $Destination,
+    '--local-package-dir', $localPkg,
+    '--site', $mirror,
+    '--packages', $CygwinPackages
+  )
+  Invoke-Checked -FilePath $setup -Arguments $args
+}
+
+function Write-VSCodeSettings {
+  <#
+  .SYNOPSIS
+    VS Code integrated terminal から Cygwin bash を呼び出す settings.json を生成します。
+
+  .PARAMETER VSCodeDir
+    VS Code の配置先ディレクトリです。
+
+  .PARAMETER CygwinDir
+    Cygwin の配置先ディレクトリです。
+
+  .PARAMETER PathEntries
+    VS Code terminal に渡す PATH エントリです。
+  #>
+  param(
+    [Parameter(Mandatory)][string]$VSCodeDir,
+    [Parameter(Mandatory)][string]$CygwinDir,
+    [Parameter(Mandatory)][string[]]$PathEntries
+  )
+  $settingsPath = Join-Path $VSCodeDir 'data/user-data/User/settings.json'
+  $bash = (Join-Path $CygwinDir 'bin/bash.exe').Replace('\','\\')
+  $envPath = ($PathEntries -join ';').Replace('\','\\')
+  $settings = [ordered]@{
+    'terminal.integrated.defaultProfile.windows' = 'PowerShell-Portable'
+    'terminal.integrated.profiles.windows' = [ordered]@{
+      'Cygwin' = [ordered]@{
+        path = (Join-Path $CygwinDir 'bin/bash.exe')
+        args = @('--login','-i')
+        icon = 'terminal-bash'
+        env = [ordered]@{
+          CHERE_INVOKING = '1'
+          PATH = "${envPath};`${env:PATH}"
+        }
+      }
+      'PowerShell-Portable' = [ordered]@{
+        path = 'powershell.exe'
+        args = @('-NoLogo')
+        env = [ordered]@{ PATH = "${envPath};`${env:PATH}" }
+      }
+    }
+    'terminal.integrated.env.windows' = [ordered]@{
+      PATH = "${envPath};`${env:PATH}"
+      PIP_CONFIG_FILE = (Join-Path $ConfigDir 'pip/pip.ini')
+      PIP_CACHE_DIR = (Join-Path $PkgDir 'pip-cache')
+      UV_CACHE_DIR = (Join-Path $PkgDir 'uv-cache')
+      npm_config_cache = (Join-Path $PkgDir 'npm-cache')
+    }
+    'workbench.colorTheme' = 'Visual Studio Dark'
+    'window.commandCenter' = $false
+    'chat.titleBar.signIn.enabled' = $false
+    'chat.disableAIFeatures' = $true
+  }
+  $json = $settings | ConvertTo-Json -Depth 20
+  Set-Content -LiteralPath $settingsPath -Value $json -Encoding UTF8
+}
+
+function Write-VSCodeExtensionRecommendations {
+  <#
+  .SYNOPSIS
+    VS Code が推奨拡張として表示する extensions.json を user-data 配下に生成します。
+
+  .PARAMETER VSCodeDir
+    VS Code の配置先ディレクトリです。
+  #>
+  param([Parameter(Mandatory)][string]$VSCodeDir)
+
+  $extensionsPath = Join-Path $VSCodeDir 'data/user-data/User/extensions.json'
+  $extensions = [ordered]@{
+    recommendations = @(
+      'ZooCodeOrganization.zoo-code',
+      'zhuangtongfa.Material-theme'
+    )
+  }
+  $json = $extensions | ConvertTo-Json -Depth 10
+  Set-Content -LiteralPath $extensionsPath -Value $json -Encoding UTF8
+}
+
+function Get-CmdSafePath {
+  <#
+  .SYNOPSIS
+    cmd.exe から外部プロセスへ渡しても文字化けしにくい短いパスを返します。
+
+  .PARAMETER Path
+    短いパスへ変換する既存パスです。
+  #>
+  param([Parameter(Mandatory)][string]$Path)
+
+  try {
+    $resolved = [IO.Path]::GetFullPath($Path)
+    $fso = New-Object -ComObject Scripting.FileSystemObject
+    $item = if (Test-Path -LiteralPath $resolved -PathType Container) {
+      $fso.GetFolder($resolved)
+    } else {
+      $fso.GetFile($resolved)
+    }
+    if ($item.ShortPath -and ($item.ShortPath -cmatch '^[\x00-\x7F]+$')) {
+      return $item.ShortPath
+    }
+  } catch {
+    Write-Log "短いパスを取得できませんでした。通常パスを使用します: $Path ($($_.Exception.Message))" 'WARN'
+  }
+
+  return [IO.Path]::GetFullPath($Path)
+}
+
+function Write-Launchers {
+  <#
+  .SYNOPSIS
+    Root 直下に VSCode.bat と Cygwin.bat を生成します。
+
+  .PARAMETER VSCodeDir
+    VS Code の配置先ディレクトリです。
+
+  .PARAMETER PathEntries
+    ランチャーに設定する PATH エントリです。
+  #>
+  param(
+    [Parameter(Mandatory)][string]$VSCodeDir,
+    [Parameter(Mandatory)][string]$CygwinDir,
+    [Parameter(Mandatory)][string[]]$PathEntries
+  )
+  $vscodeBat = Join-Path $Root 'VSCode.bat'
+  $cygwinBat = Join-Path $Root 'Cygwin.bat'
+  $launcherRoot = Get-CmdSafePath $Root
+  $vscode = @"
+@echo off
+setlocal enableextensions
+set "ROOT=$launcherRoot"
+set "PATH=%ROOT%\.local\opt\python;%ROOT%\.local\opt\python\Scripts;%ROOT%\.local\opt\nodejs;%ROOT%\.local\opt\uv;%ROOT%\.local\opt\jq;%ROOT%\.local\opt\pandoc;%ROOT%\.local\opt\vscode\bin;%PATH%"
+set "PIP_CONFIG_FILE=%ROOT%\.config\pip\pip.ini"
+set "PIP_CACHE_DIR=%ROOT%\.local\pkg\pip-cache"
+set "UV_CACHE_DIR=%ROOT%\.local\pkg\uv-cache"
+set "npm_config_cache=%ROOT%\.local\pkg\npm-cache"
+set "CODE=%ROOT%\.local\opt\vscode\Code.exe"
+set "VSCODE_USER_DATA=%ROOT%\.local\opt\vscode\data\user-data"
+set "VSCODE_EXTENSIONS=%ROOT%\.local\opt\vscode\data\extensions"
+
+start "" /min "%CODE%" ^
+    --user-data-dir "%VSCODE_USER_DATA%" ^
+    --extensions-dir "%VSCODE_EXTENSIONS%" ^
+    --disable-gpu ^
+    --no-sandbox
+endlocal
+exit /b 0
+"@
+  $cygwin = @"
+@echo off
+setlocal enableextensions
+set TERM=
+cd /d "$launcherRoot\.local\opt\cygwin\bin" && .\bash --login -i
+"@
+  Set-Content -LiteralPath $vscodeBat -Value $vscode -Encoding ASCII
+  Set-Content -LiteralPath $cygwinBat -Value $cygwin -Encoding ASCII
+}
+
+function Test-CommandPath {
+  <#
+  .SYNOPSIS
+    対象ツールが PATH から見つかることを検証し、バージョンを表示します。
+
+  .PARAMETER Name
+    ログに表示するツール名です。
+
+  .PARAMETER Exe
+    PATH から検索する実行ファイル名です。
+
+  .PARAMETER VersionArgs
+    バージョン確認に渡す引数です。
+  #>
+  param(
+    [Parameter(Mandatory)][string]$Name,
+    [Parameter(Mandatory)][string]$Exe,
+    [string[]]$VersionArgs = @('--version')
+  )
+  $found = Get-Command $Exe -ErrorAction SilentlyContinue
+  if ($null -eq $found) { throw "$Name が PATH から見つかりません: $Exe" }
+  Write-Log "$Name PATH OK: $($found.Source)" 'OK'
+  try {
+    $ver = & $Exe @VersionArgs 2>&1 | Select-Object -First 3
+    Write-Log ("$Name version: " + (($ver -join ' ') -replace '\s+', ' ')) 'OK'
+  } catch {
+    Write-Log "$Name version 確認に失敗: $($_.Exception.Message)" 'WARN'
+  }
+}
 
 try {
-    $script:InstallRootFullPath = Resolve-FullPath -Path $InstallRoot
-    if (-not $StartBatPath) {
-        $StartBatPath = Join-Path $script:InstallRootFullPath 'start.bat'
-    }
-    $script:StartBatFullPath = Resolve-FullPath -Path $StartBatPath
+  Assert-UnderDesktop $Root
+  foreach ($d in @($Root,$PkgDir,$OptDir,$ConfigDir,$LogDir,$TmpDir)) { New-Directory $d }
+  Write-Log "Root: $Root" 'STEP'
+  Write-Log "ログ: $LogFile" 'INFO'
 
-    $script:LocalRoot = Join-Path $script:InstallRootFullPath '.local'
-    $script:ScoopRoot = Join-Path $script:LocalRoot 'scoop'
-    $script:ScoopGlobalRoot = Join-Path $script:LocalRoot 'scoop-global'
-    $script:LogsRoot = Join-Path $script:LocalRoot 'logs'
-    $script:TmpRoot = Join-Path $script:LocalRoot 'tmp'
-    $script:HomeRoot = Join-Path $script:LocalRoot 'home'
-    $script:CacheRoot = Join-Path $script:InstallRootFullPath '.cache'
-    $script:ConfigRoot = Join-Path $script:InstallRootFullPath '.config'
-    $script:VscodeConfigRoot = Join-Path $script:ConfigRoot 'vscode'
-    $script:PipConfigRoot = Join-Path $script:ConfigRoot 'pip'
-    $script:NpmConfigRoot = Join-Path $script:ConfigRoot 'npm'
-    $script:UvConfigRoot = Join-Path $script:ConfigRoot 'uv'
-    $script:AppDataRoot = Join-Path $script:ConfigRoot 'AppData'
-    $script:ScoopPs1 = Join-Path $script:ScoopRoot 'apps\scoop\current\bin\scoop.ps1'
+  $PythonDir = Join-Path $OptDir 'python'
+  $NodeDir   = Join-Path $OptDir 'nodejs'
+  $UvDir     = Join-Path $OptDir 'uv'
+  $JqDir     = Join-Path $OptDir 'jq'
+  $PandocDir = Join-Path $OptDir 'pandoc'
+  $VSCodeDir = Join-Path $OptDir 'vscode'
+  $CygwinDir = Join-Path $OptDir 'cygwin'
 
-    New-Item -ItemType Directory -Path $script:LogsRoot -Force | Out-Null
-    $script:LogPath = Join-Path $script:LogsRoot ('create-pdev-{0}.log' -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+  foreach ($p in @($PythonDir,$NodeDir,$UvDir,$JqDir,$PandocDir,$VSCodeDir,$CygwinDir)) { Assert-UnderDesktop $p }
 
-    Write-Log 'Create-Pdev started.'
-    Write-Log "PowerShell: $($PSVersionTable.PSVersion)"
-    Write-Log "OS: $([Environment]::OSVersion.VersionString)"
-    Write-Log "InstallRoot: $script:InstallRootFullPath"
-    Write-Log "StartBatPath: $script:StartBatFullPath"
-    Write-Log "Versions: Python=$PythonVersion Node.js=$NodejsVersion uv=$UvVersion jq=$JqVersion pandoc=$PandocVersion VSCode=$VscodeVersion"
+  Install-PythonEmbedded $PythonDir
+  $PythonExe = Join-Path $PythonDir 'python.exe'
+  Install-PipFromWheel $PythonExe
+  Install-NodeZip $NodeDir
+  Install-UvZip $UvDir
+  Install-JqExe $JqDir
+  Install-PandocZip $PandocDir
+  Install-VSCodeZip $VSCodeDir
+  Install-Cygwin $CygwinDir
 
-    if ($PSVersionTable.PSVersion.Major -lt 5) {
-        Fail 'PowerShell 5.1 or later is required.'
-    }
+  $PathEntries = @(
+    $PythonDir,
+    (Join-Path $PythonDir 'Scripts'),
+    $NodeDir,
+    $UvDir,
+    $JqDir,
+    $PandocDir,
+    (Join-Path $VSCodeDir 'bin'),
+    (Join-Path $CygwinDir 'bin')
+  ) | Where-Object { Test-Path -LiteralPath $_ }
 
-    $directories = @(
-        $script:InstallRootFullPath,
-        $script:LocalRoot,
-        $script:ScoopRoot,
-        $script:ScoopGlobalRoot,
-        $script:LogsRoot,
-        $script:TmpRoot,
-        $script:HomeRoot,
-        $script:CacheRoot,
-        (Join-Path $script:CacheRoot 'scoop'),
-        (Join-Path $script:CacheRoot 'pip'),
-        (Join-Path $script:CacheRoot 'npm'),
-        (Join-Path $script:CacheRoot 'uv'),
-        $script:ConfigRoot,
-        $script:VscodeConfigRoot,
-        (Join-Path $script:VscodeConfigRoot 'user-data'),
-        (Join-Path $script:VscodeConfigRoot 'extensions'),
-        $script:PipConfigRoot,
-        $script:NpmConfigRoot,
-        $script:UvConfigRoot,
-        $script:AppDataRoot,
-        (Join-Path $script:AppDataRoot 'Roaming'),
-        (Join-Path $script:AppDataRoot 'Local'),
-        (Join-Path $script:LocalRoot 'python-userbase'),
-        (Join-Path $script:LocalRoot 'npm-prefix')
-    )
+  # 日本語コメント: 現プロセス PATH に反映し、この後の検証と VS Code 起動に使う。
+  $env:PATH = ($PathEntries -join ';') + ';' + $env:PATH
+  $env:PIP_CONFIG_FILE = Join-Path $ConfigDir 'pip/pip.ini'
+  $env:PIP_CACHE_DIR = Join-Path $PkgDir 'pip-cache'
+  $env:UV_CACHE_DIR = Join-Path $PkgDir 'uv-cache'
+  $env:npm_config_cache = Join-Path $PkgDir 'npm-cache'
 
-    foreach ($directory in $directories) {
-        New-Directory -Path $directory
-    }
+  Write-VSCodeSettings -VSCodeDir $VSCodeDir -CygwinDir $CygwinDir -PathEntries $PathEntries
+  Write-VSCodeExtensionRecommendations -VSCodeDir $VSCodeDir
+  Write-Launchers -VSCodeDir $VSCodeDir -CygwinDir $CygwinDir -PathEntries $PathEntries
 
-    Write-Log 'Checking network access to Scoop installer.'
-    Invoke-WebRequest -Uri 'https://get.scoop.sh' -Method Head -UseBasicParsing | Out-Null
+  Test-CommandPath 'python' 'python.exe' @('--version')
+  Test-CommandPath 'pip' 'pip.exe' @('--version')
+  Test-CommandPath 'node' 'node.exe' @('--version')
+  Test-CommandPath 'npm' 'npm.cmd' @('--version')
+  Test-CommandPath 'uv' 'uv.exe' @('--version')
+  Test-CommandPath 'jq' 'jq.exe' @('--version')
+  Test-CommandPath 'pandoc' 'pandoc.exe' @('--version')
+  Test-CommandPath 'code' 'code.cmd' @('--version')
+  Test-CommandPath 'cygwin bash' 'bash.exe' @('--version')
 
-    $userEnvBackup = Backup-UserEnvironment
-    Set-PortableProcessEnvironment
-    Write-ConfigFiles
+  Write-Log "VSCode 起動コマンド: $(Join-Path $Root 'VSCode.bat')" 'STEP'
+  Write-Log "VSCode 推奨拡張: $(Join-Path $VSCodeDir 'data/user-data/User/extensions.json')" 'STEP'
+  Write-Log "Cygwin 起動コマンド: $(Join-Path $Root 'Cygwin.bat')" 'STEP'
+  Write-Log "インストール完了" 'OK'
 
-    Install-ScoopIfNeeded
-    Restore-UserEnvironment -Backup $userEnvBackup
-    Set-PortableProcessEnvironment
-    Initialize-ScoopConfig
-
-    Install-ScoopAppVersion -App 'python' -Version $PythonVersion
-    Install-ScoopAppVersion -App 'nodejs' -Version $NodejsVersion
-    Install-ScoopAppVersion -App 'uv' -Version $UvVersion
-    Install-ScoopAppVersion -App 'jq' -Version $JqVersion
-    Install-ScoopAppVersion -App 'pandoc' -Version $PandocVersion
-    Install-ScoopAppVersion -App 'vscode' -Version $VscodeVersion
-
-    Set-PortableProcessEnvironment
-    Test-InstalledCommands
-    Write-StartBatch
-
-    Write-Log 'Create-Pdev finished successfully.'
-    exit 0
 } catch {
-    if ($script:LogPath) {
-        Write-Log "Create-Pdev failed: $($_.Exception.Message)"
-    } else {
-        Write-Error $_
-    }
-    if ($userEnvBackup) {
-        Restore-UserEnvironment -Backup $userEnvBackup
-    }
-    exit 1
+  Write-Log $_.Exception.Message 'ERROR'
+  Write-Log "詳細ログ: $LogFile" 'ERROR'
+  throw
 }
