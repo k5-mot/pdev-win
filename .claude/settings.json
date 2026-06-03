@@ -1,0 +1,9 @@
+{
+    "env": {
+        "ANTHROPIC_AUTH_TOKEN": "sk-litellm-master-key",
+        "ANTHROPIC_BASE_URL": "http://litellm:4000",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "free-router",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": "free-router",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "free-router"
+    }
+}
