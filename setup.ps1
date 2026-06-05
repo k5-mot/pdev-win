@@ -3,7 +3,6 @@
 param(
   [string]$Root = '',
 
-  # Python 3.13 系を使う場合の指定例。
   [string]$PythonVersion = '3.12.10',
 
   [string]$NodeVersion = '24.16.0',
@@ -20,6 +19,8 @@ param(
 
   [switch]$Force
 )
+
+$script:InstallForce = [bool]$Force
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -160,7 +161,7 @@ function Download-FileCached {
     [Parameter(Mandatory)][string]$FileName
   )
   $dest = Join-Path $PkgDir $FileName
-  if ((Test-Path -LiteralPath $dest) -and (-not $Force)) {
+  if ((Test-Path -LiteralPath $dest) -and (-not $script:InstallForce)) {
     Write-Log "Using cached file: $FileName" 'OK'
     return $dest
   }
@@ -288,23 +289,28 @@ function Get-VersionTag {
 Python embeddable zip を展開して portable Python を構成します。
 .PARAMETER Destination
 Python のインストール先ディレクトリです。
+.PARAMETER Version
+インストールする Python のバージョンです。
 #>
 function Install-PythonEmbedded {
-    param([Parameter(Mandatory)][string]$Destination)
-  Write-Log "Installing Python $PythonVersion to: $Destination" 'STEP'
-  $pyCompact = $PythonVersion.Replace('.', '')
+    param(
+    [Parameter(Mandatory)][string]$Destination,
+    [Parameter(Mandatory)][string]$Version
+  )
+  Write-Log "Installing Python $Version to: $Destination" 'STEP'
+  $pyCompact = $Version.Replace('.', '')
   $zip = Download-FirstAvailableCached `
     -Candidates @(
       [pscustomobject]@{
-        Url = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-embed-amd64.zip"
-        FileName = "python-$PythonVersion-embed-amd64.zip"
+        Url = "https://www.python.org/ftp/python/$Version/python-$Version-embed-amd64.zip"
+        FileName = "python-$Version-embed-amd64.zip"
       },
       [pscustomobject]@{
-        Url = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-embeddable-amd64.zip"
-        FileName = "python-$PythonVersion-embeddable-amd64.zip"
+        Url = "https://www.python.org/ftp/python/$Version/python-$Version-embeddable-amd64.zip"
+        FileName = "python-$Version-embeddable-amd64.zip"
       }
     ) `
-    -ErrorMessage "Could not find the Windows embeddable zip for Python $PythonVersion. Specify a version that provides python-$PythonVersion-embed-amd64.zip or python-$PythonVersion-embeddable-amd64.zip at https://www.python.org/ftp/python/$PythonVersion/."
+    -ErrorMessage "Could not find the Windows embeddable zip for Python $Version. Specify a version that provides python-$Version-embed-amd64.zip or python-$Version-embeddable-amd64.zip at https://www.python.org/ftp/python/$Version/."
   Expand-ZipClean $zip $Destination
   New-Directory (Join-Path $Destination 'Lib/site-packages')
 
@@ -393,11 +399,16 @@ exit /b %ERRORLEVEL%
 Node.js の Windows zip を展開します。
 .PARAMETER Destination
 Node.js のインストール先ディレクトリです。
+.PARAMETER Version
+インストールする Node.js のバージョンです。
 #>
 function Install-NodeZip {
-    param([Parameter(Mandatory)][string]$Destination)
-  Write-Log "Installing Node.js $NodeVersion to: $Destination" 'STEP'
-  $tag = Get-VersionTag $NodeVersion
+    param(
+    [Parameter(Mandatory)][string]$Destination,
+    [Parameter(Mandatory)][string]$Version
+  )
+  Write-Log "Installing Node.js $Version to: $Destination" 'STEP'
+  $tag = Get-VersionTag $Version
   $url = "https://nodejs.org/dist/$tag/node-$tag-win-x64.zip"
   $zip = Download-FileCached $url "node-$tag-win-x64.zip"
   Expand-ZipClean $zip $Destination
@@ -408,13 +419,18 @@ function Install-NodeZip {
 uv の Windows zip を展開します。
 .PARAMETER Destination
 uv のインストール先ディレクトリです。
+.PARAMETER Version
+インストールする uv のバージョンです。
 #>
 function Install-UvZip {
-    param([Parameter(Mandatory)][string]$Destination)
-  Write-Log "Installing uv $UvVersion to: $Destination" 'STEP'
-  $version = $UvVersion.TrimStart('v')
-  $url = "https://releases.astral.sh/github/uv/releases/download/$version/uv-x86_64-pc-windows-msvc.zip"
-  $zip = Download-FileCached $url "uv-$version-x86_64-pc-windows-msvc.zip"
+    param(
+    [Parameter(Mandatory)][string]$Destination,
+    [Parameter(Mandatory)][string]$Version
+  )
+  Write-Log "Installing uv $Version to: $Destination" 'STEP'
+  $versionTag = $Version.TrimStart('v')
+  $url = "https://releases.astral.sh/github/uv/releases/download/$versionTag/uv-x86_64-pc-windows-msvc.zip"
+  $zip = Download-FileCached $url "uv-$versionTag-x86_64-pc-windows-msvc.zip"
   Expand-ZipClean $zip $Destination
 }
 
@@ -423,13 +439,18 @@ function Install-UvZip {
 jq の Windows 実行ファイルを配置します。
 .PARAMETER Destination
 jq のインストール先ディレクトリです。
+.PARAMETER Version
+インストールする jq のバージョンです。
 #>
 function Install-JqExe {
-    param([Parameter(Mandatory)][string]$Destination)
-  Write-Log "Installing jq $JqVersion to: $Destination" 'STEP'
+    param(
+    [Parameter(Mandatory)][string]$Destination,
+    [Parameter(Mandatory)][string]$Version
+  )
+  Write-Log "Installing jq $Version to: $Destination" 'STEP'
   New-Directory $Destination
-  $tag = if ($JqVersion.StartsWith('jq-')) { $JqVersion } else { "jq-$JqVersion" }
-  $exe = Download-FileCached "https://github.com/jqlang/jq/releases/download/$tag/jq-windows-amd64.exe" "jq-$JqVersion-windows-amd64.exe"
+  $tag = if ($Version.StartsWith('jq-')) { $Version } else { "jq-$Version" }
+  $exe = Download-FileCached "https://github.com/jqlang/jq/releases/download/$tag/jq-windows-amd64.exe" "jq-$Version-windows-amd64.exe"
   Copy-Item -LiteralPath $exe -Destination (Join-Path $Destination 'jq.exe') -Force
 }
 
@@ -438,12 +459,17 @@ function Install-JqExe {
 pandoc の Windows zip を展開します。
 .PARAMETER Destination
 pandoc のインストール先ディレクトリです。
+.PARAMETER Version
+インストールする pandoc のバージョンです。
 #>
 function Install-PandocZip {
-    param([Parameter(Mandatory)][string]$Destination)
-  Write-Log "Installing pandoc $PandocVersion to: $Destination" 'STEP'
-  $url = "https://github.com/jgm/pandoc/releases/download/$PandocVersion/pandoc-$PandocVersion-windows-x86_64.zip"
-  $zip = Download-FileCached $url "pandoc-$PandocVersion-windows-x86_64.zip"
+    param(
+    [Parameter(Mandatory)][string]$Destination,
+    [Parameter(Mandatory)][string]$Version
+  )
+  Write-Log "Installing pandoc $Version to: $Destination" 'STEP'
+  $url = "https://github.com/jgm/pandoc/releases/download/$Version/pandoc-$Version-windows-x86_64.zip"
+  $zip = Download-FileCached $url "pandoc-$Version-windows-x86_64.zip"
   Expand-ZipClean $zip $Destination
 }
 
@@ -562,11 +588,16 @@ function Install-PortableCliTools {
 VS Code の portable archive を展開して data ディレクトリを作成します。
 .PARAMETER Destination
 VS Code のインストール先ディレクトリです。
+.PARAMETER Version
+インストールする VS Code のバージョンです。
 #>
 function Install-VSCodeZip {
-    param([Parameter(Mandatory)][string]$Destination)
-  Write-Log "Installing VS Code $VSCodeVersion to: $Destination" 'STEP'
-  $versionSegment = if ($VSCodeVersion -in @('stable','latest')) { 'latest' } else { $VSCodeVersion }
+    param(
+    [Parameter(Mandatory)][string]$Destination,
+    [Parameter(Mandatory)][string]$Version
+  )
+  Write-Log "Installing VS Code $Version to: $Destination" 'STEP'
+  $versionSegment = if ($Version -in @('stable','latest')) { 'latest' } else { $Version }
   $url = "https://update.code.visualstudio.com/$versionSegment/win32-x64-archive/stable"
   $zip = Download-FileCached $url "vscode-$versionSegment-win32-x64-archive.zip"
   Expand-ZipClean $zip $Destination
@@ -629,9 +660,14 @@ function Write-CygwinSetupDefaults {
 Cygwin setup を実行して Cygwin をインストールします。
 .PARAMETER Destination
 Cygwin のインストール先ディレクトリです。
+.PARAMETER Packages
+インストールする Cygwin パッケージ一覧です。
 #>
 function Install-Cygwin {
-    param([Parameter(Mandatory)][string]$Destination)
+    param(
+    [Parameter(Mandatory)][string]$Destination,
+    [Parameter(Mandatory)][string]$Packages
+  )
   Write-Log "Installing Cygwin to: $Destination" 'STEP' -LogOnly
   New-Directory $Destination
   $setup = Download-FileCached $CygwinSetupUrl 'setup-x86_64.exe'
@@ -647,7 +683,7 @@ function Install-Cygwin {
     '--root', $Destination,
     '--local-package-dir', $localPkg,
     '--site', $mirror,
-    '--packages', $CygwinPackages
+    '--packages', $Packages
   )
   Invoke-Checked -FilePath $setup -Arguments $cygwinArgs -LogOnly
 }
@@ -929,20 +965,20 @@ try {
 
   foreach ($p in @($PythonDir,$NodeDir,$UvDir,$JqDir,$PandocDir,$VSCodeDir,$CygwinDir) + $PortableToolDirs.Values) { Assert-UnderDesktop $p }
 
-  Install-PythonEmbedded $PythonDir
+  Install-PythonEmbedded -Destination $PythonDir -Version $PythonVersion
   $PythonExe = Join-Path $PythonDir 'python.exe'
   Install-PipFromWheel $PythonExe
   $PipCmd = Join-Path $PythonDir 'Scripts/pip.cmd'
   if (-not (Test-Path -LiteralPath $PipCmd)) {
     throw "pip launcher was not created: $PipCmd"
   }
-  Install-NodeZip $NodeDir
-  Install-UvZip $UvDir
-  Install-JqExe $JqDir
-  Install-PandocZip $PandocDir
+  Install-NodeZip -Destination $NodeDir -Version $NodeVersion
+  Install-UvZip -Destination $UvDir -Version $UvVersion
+  Install-JqExe -Destination $JqDir -Version $JqVersion
+  Install-PandocZip -Destination $PandocDir -Version $PandocVersion
   Install-PortableCliTools -Destinations $PortableToolDirs
-  Install-VSCodeZip $VSCodeDir
-  Install-Cygwin $CygwinDir
+  Install-VSCodeZip -Destination $VSCodeDir -Version $VSCodeVersion
+  Install-Cygwin -Destination $CygwinDir -Packages $CygwinPackages
 
   $NodeExe = Join-Path $NodeDir 'node.exe'
   $NpmCmd = Join-Path $NodeDir 'npm.cmd'
@@ -1036,4 +1072,3 @@ try {
   Write-Log "Log file: $LogFile" 'ERROR'
   throw
 }
-
