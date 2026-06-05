@@ -3,7 +3,7 @@
 param(
   [string]$Root = '',
 
-  # [string]$PythonVersion = '3.13.13',
+  # Python 3.13 系を使う場合の指定例。
   [string]$PythonVersion = '3.12.10',
 
   [string]$NodeVersion = '24.16.0',
@@ -13,10 +13,6 @@ param(
   [string]$JqVersion = '1.8.0',
 
   [string]$PandocVersion = '3.9.0.2',
-
-  [string]$RustVersion = 'stable',
-
-  [string]$RipgrepVersion = '14.1.1',
 
   [string]$VSCodeVersion = 'stable',
 
@@ -62,10 +58,21 @@ $VSCodeExtensions = @(
   'anthropic.claude-code'
 )
 
+<#
+.SYNOPSIS
+ログメッセージをコンソールとログファイルへ出力します。
+.PARAMETER Message
+出力するメッセージです。
+.PARAMETER Level
+ログレベルです。
+.PARAMETER LogOnly
+コンソールへ表示せずログファイルのみに出力します。
+#>
 function Write-Log {
     param(
     [Parameter(Mandatory)] [string]$Message,
-    [ValidateSet('INFO','OK','WARN','ERROR','STEP')] [string]$Level = 'INFO'
+    [ValidateSet('INFO','OK','WARN','ERROR','STEP')] [string]$Level = 'INFO',
+    [switch]$LogOnly
   )
   $stamp = Get-Date -Format 'HH:mm:ss'
   $map = @{
@@ -76,7 +83,9 @@ function Write-Log {
     STEP  = @{ Color='Magenta' }
   }
   $line = "[$stamp] [$Level] $Message"
-  Write-Host $line -ForegroundColor $map[$Level].Color
+  if (-not $LogOnly) {
+    Write-Host $line -ForegroundColor $map[$Level].Color
+  }
   try {
     if (Test-Path -LiteralPath $LogDir) {
       Add-Content -LiteralPath $LogFile -Value $line -Encoding UTF8 -ErrorAction Stop
@@ -85,6 +94,12 @@ function Write-Log {
   }
 }
 
+<#
+.SYNOPSIS
+指定されたパスが Desktop 配下であることを検証します。
+.PARAMETER Path
+検証するパスです。
+#>
 function Assert-UnderDesktop {
     param([Parameter(Mandatory)][string]$Path)
   $full = [IO.Path]::GetFullPath($Path)
@@ -94,6 +109,12 @@ function Assert-UnderDesktop {
   }
 }
 
+<#
+.SYNOPSIS
+指定されたディレクトリを必要に応じて作成します。
+.PARAMETER Path
+作成するディレクトリのパスです。
+#>
 function New-Directory {
     param([Parameter(Mandatory)][string]$Path)
   if (-not (Test-Path -LiteralPath $Path)) {
@@ -101,6 +122,12 @@ function New-Directory {
   }
 }
 
+<#
+.SYNOPSIS
+指定されたパスがネットワークパスかどうかを判定します。
+.PARAMETER Path
+判定するパスです。
+#>
 function Test-NetworkPath {
     param([Parameter(Mandatory)][string]$Path)
 
@@ -119,6 +146,14 @@ function Test-NetworkPath {
   }
 }
 
+<#
+.SYNOPSIS
+URL からファイルをダウンロードし、キャッシュ済みの場合は再利用します。
+.PARAMETER Url
+ダウンロード元 URL です。
+.PARAMETER FileName
+キャッシュ保存するファイル名です。
+#>
 function Download-FileCached {
     param(
     [Parameter(Mandatory)][string]$Url,
@@ -134,6 +169,14 @@ function Download-FileCached {
   return $dest
 }
 
+<#
+.SYNOPSIS
+複数の候補 URL から最初に取得できたファイルをキャッシュします。
+.PARAMETER Candidates
+URL とファイル名を持つ候補一覧です。
+.PARAMETER ErrorMessage
+すべての候補が失敗した場合のエラーメッセージです。
+#>
 function Download-FirstAvailableCached {
     param(
     [Parameter(Mandatory)][object[]]$Candidates,
@@ -151,6 +194,14 @@ function Download-FirstAvailableCached {
   throw $ErrorMessage
 }
 
+<#
+.SYNOPSIS
+zip ファイルを展開先へクリーン展開します。
+.PARAMETER ZipPath
+展開する zip ファイルのパスです。
+.PARAMETER Destination
+展開先ディレクトリです。
+#>
 function Expand-ZipClean {
     param(
     [Parameter(Mandatory)][string]$ZipPath,
@@ -175,23 +226,69 @@ function Expand-ZipClean {
   }
 }
 
+<#
+.SYNOPSIS
+外部コマンドを実行し、終了コードを検証します。
+.PARAMETER FilePath
+実行するファイルのパスです。
+.PARAMETER Arguments
+コマンド引数です。
+.PARAMETER WorkingDirectory
+実行時の作業ディレクトリです。
+.PARAMETER LogOnly
+標準出力と標準エラーをログファイルのみに記録します。
+#>
 function Invoke-Checked {
     param(
     [Parameter(Mandatory)][string]$FilePath,
     [string[]]$Arguments = @(),
-    [string]$WorkingDirectory = $Root
+    [string]$WorkingDirectory = $Root,
+    [switch]$LogOnly
   )
-  Write-Log "Running: $FilePath $($Arguments -join ' ')" 'INFO'
-  $p = Start-Process -FilePath $FilePath -ArgumentList $Arguments -WorkingDirectory $WorkingDirectory -Wait -PassThru -NoNewWindow
-  if ($p.ExitCode -ne 0) { throw "Command failed with ExitCode=$($p.ExitCode): $FilePath" }
+  Write-Log "Running: $FilePath $($Arguments -join ' ')" 'INFO' -LogOnly:$LogOnly
+  if (-not $LogOnly) {
+    $p = Start-Process -FilePath $FilePath -ArgumentList $Arguments -WorkingDirectory $WorkingDirectory -Wait -PassThru -NoNewWindow
+    if ($p.ExitCode -ne 0) { throw "Command failed with ExitCode=$($p.ExitCode): $FilePath" }
+    return
+  }
+
+  $stdout = Join-Path $TmpDir ('process-{0}-stdout.log' -f [guid]::NewGuid().ToString('N'))
+  $stderr = Join-Path $TmpDir ('process-{0}-stderr.log' -f [guid]::NewGuid().ToString('N'))
+  try {
+    $p = Start-Process -FilePath $FilePath -ArgumentList $Arguments -WorkingDirectory $WorkingDirectory -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    foreach ($path in @($stdout, $stderr)) {
+      if (Test-Path -LiteralPath $path) {
+        $content = Get-Content -LiteralPath $path -ErrorAction SilentlyContinue
+        if ($content) {
+          Add-Content -LiteralPath $LogFile -Value $content -Encoding UTF8 -ErrorAction SilentlyContinue
+        }
+      }
+    }
+    if ($p.ExitCode -ne 0) { throw "Command failed with ExitCode=$($p.ExitCode): $FilePath" }
+  } finally {
+    Remove-Item -LiteralPath $stdout -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $stderr -Force -ErrorAction SilentlyContinue
+  }
 }
 
+<#
+.SYNOPSIS
+バージョン文字列に v 接頭辞を付けたタグ名を返します。
+.PARAMETER Version
+変換するバージョン文字列です。
+#>
 function Get-VersionTag {
     param([Parameter(Mandatory)][string]$Version)
   if ($Version.StartsWith('v')) { return $Version }
   return "v$Version"
 }
 
+<#
+.SYNOPSIS
+Python embeddable zip を展開して portable Python を構成します。
+.PARAMETER Destination
+Python のインストール先ディレクトリです。
+#>
 function Install-PythonEmbedded {
     param([Parameter(Mandatory)][string]$Destination)
   Write-Log "Installing Python $PythonVersion to: $Destination" 'STEP'
@@ -249,6 +346,12 @@ no-build-isolation = true
 "@
 }
 
+<#
+.SYNOPSIS
+PyPI から取得した pip wheel を site-packages へ直接展開します。
+.PARAMETER PythonExe
+pip を導入する Python 実行ファイルのパスです。
+#>
 function Install-PipFromWheel {
     param([Parameter(Mandatory)][string]$PythonExe)
   Write-Log "Installing latest pip wheel into site-packages" 'STEP'
@@ -285,6 +388,12 @@ exit /b %ERRORLEVEL%
   if ($LASTEXITCODE -ne 0) { throw "pip wheel direct extraction failed. ExitCode=$LASTEXITCODE" }
 }
 
+<#
+.SYNOPSIS
+Node.js の Windows zip を展開します。
+.PARAMETER Destination
+Node.js のインストール先ディレクトリです。
+#>
 function Install-NodeZip {
     param([Parameter(Mandatory)][string]$Destination)
   Write-Log "Installing Node.js $NodeVersion to: $Destination" 'STEP'
@@ -294,6 +403,12 @@ function Install-NodeZip {
   Expand-ZipClean $zip $Destination
 }
 
+<#
+.SYNOPSIS
+uv の Windows zip を展開します。
+.PARAMETER Destination
+uv のインストール先ディレクトリです。
+#>
 function Install-UvZip {
     param([Parameter(Mandatory)][string]$Destination)
   Write-Log "Installing uv $UvVersion to: $Destination" 'STEP'
@@ -303,6 +418,12 @@ function Install-UvZip {
   Expand-ZipClean $zip $Destination
 }
 
+<#
+.SYNOPSIS
+jq の Windows 実行ファイルを配置します。
+.PARAMETER Destination
+jq のインストール先ディレクトリです。
+#>
 function Install-JqExe {
     param([Parameter(Mandatory)][string]$Destination)
   Write-Log "Installing jq $JqVersion to: $Destination" 'STEP'
@@ -312,6 +433,12 @@ function Install-JqExe {
   Copy-Item -LiteralPath $exe -Destination (Join-Path $Destination 'jq.exe') -Force
 }
 
+<#
+.SYNOPSIS
+pandoc の Windows zip を展開します。
+.PARAMETER Destination
+pandoc のインストール先ディレクトリです。
+#>
 function Install-PandocZip {
     param([Parameter(Mandatory)][string]$Destination)
   Write-Log "Installing pandoc $PandocVersion to: $Destination" 'STEP'
@@ -320,73 +447,122 @@ function Install-PandocZip {
   Expand-ZipClean $zip $Destination
 }
 
-function Install-RipgrepZip {
-    param([Parameter(Mandatory)][string]$Destination)
-  Write-Log "Installing ripgrep $RipgrepVersion to: $Destination" 'STEP'
-  $tag = $RipgrepVersion.TrimStart('v')
-  $zip = Download-FileCached `
-    "https://github.com/BurntSushi/ripgrep/releases/download/$tag/ripgrep-$tag-x86_64-pc-windows-msvc.zip" `
-    "ripgrep-$tag-x86_64-pc-windows-msvc.zip"
-  Expand-ZipClean $zip $Destination
-}
-
-function Remove-RustupProxyLinks {
-    param([Parameter(Mandatory)][string]$CargoDestination)
-
-  $binDir = Join-Path $CargoDestination 'bin'
-  if (-not (Test-Path -LiteralPath $binDir)) { return }
-
-  $proxyNames = @(
-    'cargo.exe',
-    'cargo-clippy.exe',
-    'cargo-fmt.exe',
-    'clippy-driver.exe',
-    'rustc.exe',
-    'rustdoc.exe',
-    'rustfmt.exe',
-    'rust-gdb.exe',
-    'rust-gdbgui.exe',
-    'rust-lldb.exe',
-    'rustup.exe'
+<#
+.SYNOPSIS
+GitHub Releases から条件に合う asset を取得します。
+.PARAMETER Repo
+owner/name 形式の GitHub repository 名です。
+.PARAMETER AssetPattern
+対象 asset 名を判定する正規表現です。
+#>
+function Get-GitHubReleaseAsset {
+    param(
+    [Parameter(Mandatory)][string]$Repo,
+    [Parameter(Mandatory)][string]$AssetPattern
   )
 
-  foreach ($name in $proxyNames) {
-    $path = Join-Path $binDir $name
-    $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-    if ($null -ne $item -and (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
-      Write-Log "Removing existing Rust proxy symlink: $path" 'WARN'
-      Remove-Item -LiteralPath $path -Force
+  $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases" -UseBasicParsing
+  foreach ($release in $releases) {
+    if ($release.draft -or $release.prerelease) { continue }
+    $asset = @($release.assets | Where-Object { $_.name -match $AssetPattern } | Select-Object -First 1)
+    if ($asset.Count -gt 0) {
+      return [pscustomobject]@{
+        Tag = $release.tag_name
+        Name = $asset[0].name
+        Url = $asset[0].browser_download_url
+      }
     }
+  }
+
+  return $null
+}
+
+<#
+.SYNOPSIS
+GitHub Releases の portable asset をダウンロードして配置します。
+.PARAMETER Name
+ツール名です。
+.PARAMETER Repo
+owner/name 形式の GitHub repository 名です。
+.PARAMETER AssetPattern
+対象 asset 名を判定する正規表現です。
+.PARAMETER Destination
+インストール先ディレクトリです。
+.PARAMETER ExeName
+配置後の実行ファイル名です。
+#>
+function Install-GitHubPortableTool {
+    param(
+    [Parameter(Mandatory)][string]$Name,
+    [Parameter(Mandatory)][string]$Repo,
+    [Parameter(Mandatory)][string]$AssetPattern,
+    [Parameter(Mandatory)][string]$Destination,
+    [Parameter(Mandatory)][string]$ExeName
+  )
+
+  Write-Log "Installing $Name from GitHub Releases to: $Destination" 'STEP'
+  $asset = Get-GitHubReleaseAsset -Repo $Repo -AssetPattern $AssetPattern
+  if ($null -eq $asset) {
+    Write-Log "$Name was skipped: no portable Windows x64 release asset matched '$AssetPattern' in $Repo." 'WARN'
+    return $false
+  }
+
+  Write-Log "$Name release asset: $($asset.Tag) / $($asset.Name)" 'INFO'
+  $cacheName = "$Name-$($asset.Tag)-$($asset.Name)"
+  $download = Download-FileCached $asset.Url $cacheName
+  if ($asset.Name.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase)) {
+    New-Directory $Destination
+    Copy-Item -LiteralPath $download -Destination (Join-Path $Destination $ExeName) -Force
+    return $true
+  }
+
+  if ($asset.Name.EndsWith('.zip', [StringComparison]::OrdinalIgnoreCase)) {
+    Expand-ZipClean $download $Destination
+    return $true
+  }
+
+  Write-Log "$Name was skipped: asset '$($asset.Name)' is not a supported portable .zip or .exe." 'WARN'
+  return $false
+}
+
+<#
+.SYNOPSIS
+GitHub Releases から portable CLI tools をまとめてインストールします。
+.PARAMETER Destinations
+ツール名とインストール先ディレクトリの対応表です。
+#>
+function Install-PortableCliTools {
+    param([Parameter(Mandatory)][hashtable]$Destinations)
+
+  $tools = @(
+    @{ Name='bat'; Repo='sharkdp/bat'; Pattern='^bat-v?[0-9.]+-x86_64-pc-windows-msvc\.zip$'; Exe='bat.exe' },
+    @{ Name='bottom'; Repo='ClementTsang/bottom'; Pattern='^bottom_x86_64-pc-windows-msvc\.zip$'; Exe='btm.exe' },
+    @{ Name='delta'; Repo='dandavison/delta'; Pattern='^delta-[0-9.]+-x86_64-pc-windows-msvc\.zip$'; Exe='delta.exe' },
+    @{ Name='dust'; Repo='bootandy/dust'; Pattern='^dust-v?[0-9.]+-x86_64-pc-windows-msvc\.zip$'; Exe='dust.exe' },
+    @{ Name='eza'; Repo='eza-community/eza'; Pattern='^eza\.exe_x86_64-pc-windows-gnu\.zip$'; Exe='eza.exe' },
+    @{ Name='fd'; Repo='sharkdp/fd'; Pattern='^fd-v?[0-9.]+-x86_64-pc-windows-msvc\.zip$'; Exe='fd.exe' },
+    @{ Name='genact'; Repo='svenstaro/genact'; Pattern='^genact-[0-9.]+-x86_64-pc-windows-msvc\.exe$'; Exe='genact.exe' },
+    @{ Name='hyperfine'; Repo='sharkdp/hyperfine'; Pattern='^hyperfine-v?[0-9.]+-x86_64-pc-windows-msvc\.zip$'; Exe='hyperfine.exe' },
+    @{ Name='procs'; Repo='dalance/procs'; Pattern='^procs-v?[0-9.]+-x86_64-windows\.zip$'; Exe='procs.exe' },
+    @{ Name='ripgrep'; Repo='BurntSushi/ripgrep'; Pattern='^ripgrep-[0-9.]+-x86_64-pc-windows-msvc\.zip$'; Exe='rg.exe' }
+  )
+
+  foreach ($tool in $tools) {
+    Install-GitHubPortableTool `
+      -Name $tool.Name `
+      -Repo $tool.Repo `
+      -AssetPattern $tool.Pattern `
+      -Destination $Destinations[$tool.Name] `
+      -ExeName $tool.Exe | Out-Null
   }
 }
 
-function Install-Rust {
-    param(
-    [Parameter(Mandatory)][string]$RustupDestination,
-    [Parameter(Mandatory)][string]$CargoDestination
-  )
-  Write-Log "Installing Rust ($RustVersion) to: $CargoDestination" 'STEP'
-  New-Directory $RustupDestination
-  New-Directory $CargoDestination
-  Remove-RustupProxyLinks -CargoDestination $CargoDestination
-
-  $rustupInit = Download-FileCached `
-    'https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe' `
-    'rustup-init.exe'
-
-  $env:RUSTUP_HOME = $RustupDestination
-  $env:CARGO_HOME  = $CargoDestination
-
-  $toolchain = $RustVersion.TrimStart('v')
-  $rustupArgs = @(
-    '-y',
-    '--no-modify-path',
-    '--default-toolchain', $toolchain,
-    '--profile', 'minimal'
-  )
-  Invoke-Checked -FilePath $rustupInit -Arguments $rustupArgs
-}
-
+<#
+.SYNOPSIS
+VS Code の portable archive を展開して data ディレクトリを作成します。
+.PARAMETER Destination
+VS Code のインストール先ディレクトリです。
+#>
 function Install-VSCodeZip {
     param([Parameter(Mandatory)][string]$Destination)
   Write-Log "Installing VS Code $VSCodeVersion to: $Destination" 'STEP'
@@ -399,6 +575,12 @@ function Install-VSCodeZip {
   New-Directory (Join-Path $Destination 'data/extensions')
 }
 
+<#
+.SYNOPSIS
+Cygwin mirror の metadata にアクセスできるか確認します。
+.PARAMETER Mirror
+確認する Cygwin mirror URL です。
+#>
 function Test-CygwinMirror {
     param([Parameter(Mandatory)][string]$Mirror)
 
@@ -412,6 +594,10 @@ function Test-CygwinMirror {
   }
 }
 
+<#
+.SYNOPSIS
+利用可能な Cygwin mirror を選択します。
+#>
 function Select-CygwinMirror {
     foreach ($mirror in $CygwinMirrors) {
     if (Test-CygwinMirror $mirror) {
@@ -423,6 +609,12 @@ function Select-CygwinMirror {
   return $CygwinFallbackMirror
 }
 
+<#
+.SYNOPSIS
+Cygwin setup の既定設定ファイルを作成します。
+.PARAMETER Destination
+Cygwin のインストール先ディレクトリです。
+#>
 function Write-CygwinSetupDefaults {
     param([Parameter(Mandatory)][string]$Destination)
 
@@ -432,16 +624,22 @@ function Write-CygwinSetupDefaults {
   Set-Content -LiteralPath (Join-Path $setupDir 'net-method') -Value 'IE5' -Encoding ASCII
 }
 
+<#
+.SYNOPSIS
+Cygwin setup を実行して Cygwin をインストールします。
+.PARAMETER Destination
+Cygwin のインストール先ディレクトリです。
+#>
 function Install-Cygwin {
     param([Parameter(Mandatory)][string]$Destination)
-  Write-Log "Installing Cygwin to: $Destination" 'STEP'
+  Write-Log "Installing Cygwin to: $Destination" 'STEP' -LogOnly
   New-Directory $Destination
   $setup = Download-FileCached $CygwinSetupUrl 'setup-x86_64.exe'
   $localPkg = Join-Path $PkgDir 'cygwin'
   New-Directory $localPkg
   Write-CygwinSetupDefaults $Destination
   $mirror = Select-CygwinMirror
-  Write-Log "Cygwin mirror: $mirror" 'INFO'
+  Write-Log "Cygwin mirror: $mirror" 'INFO' -LogOnly
   $cygwinArgs = @(
     '--quiet-mode',
     '--no-admin',
@@ -451,15 +649,25 @@ function Install-Cygwin {
     '--site', $mirror,
     '--packages', $CygwinPackages
   )
-  Invoke-Checked -FilePath $setup -Arguments $cygwinArgs
+  Invoke-Checked -FilePath $setup -Arguments $cygwinArgs -LogOnly
 }
 
+<#
+.SYNOPSIS
+VS Code portable mode 用の settings.json を生成します。
+.PARAMETER VSCodeDir
+VS Code のインストール先ディレクトリです。
+.PARAMETER CygwinDir
+Cygwin のインストール先ディレクトリです。
+.PARAMETER PowerShellPathEntries
+PowerShell 用 PATH に追加するディレクトリ一覧です。
+.PARAMETER CygwinPathEntries
+Cygwin profile 用 PATH に追加するディレクトリ一覧です。
+#>
 function Write-VSCodeSettings {
     param(
     [Parameter(Mandatory)][string]$VSCodeDir,
     [Parameter(Mandatory)][string]$CygwinDir,
-    [Parameter(Mandatory)][string]$RustupDir,
-    [Parameter(Mandatory)][string]$CargoDir,
     [Parameter(Mandatory)][string[]]$PowerShellPathEntries,
     [Parameter(Mandatory)][string[]]$CygwinPathEntries
   )
@@ -492,8 +700,6 @@ function Write-VSCodeSettings {
       UV_CACHE_DIR   = (Join-Path $PkgDir 'uv-cache')
       npm_config_cache = (Join-Path $PkgDir 'npm-cache')
       npm_config_prefix = $NodeDir
-      RUSTUP_HOME    = $RustupDir
-      CARGO_HOME     = $CargoDir
     }
     'workbench.colorTheme' = 'Visual Studio Dark'
     'window.commandCenter' = $false
@@ -504,6 +710,12 @@ function Write-VSCodeSettings {
   Set-Content -LiteralPath $settingsPath -Value $json -Encoding UTF8
 }
 
+<#
+.SYNOPSIS
+VS Code の推奨拡張機能ファイルを生成します。
+.PARAMETER VSCodeDir
+VS Code のインストール先ディレクトリです。
+#>
 function Write-VSCodeExtensionRecommendations {
     param([Parameter(Mandatory)][string]$VSCodeDir)
 
@@ -515,6 +727,12 @@ function Write-VSCodeExtensionRecommendations {
   Set-Content -LiteralPath $extensionsPath -Value $json -Encoding UTF8
 }
 
+<#
+.SYNOPSIS
+VS Code CLI を使って拡張機能を portable extensions dir にインストールします。
+.PARAMETER VSCodeDir
+VS Code のインストール先ディレクトリです。
+#>
 function Install-VSCodeExtensions {
     param([Parameter(Mandatory)][string]$VSCodeDir)
 
@@ -523,16 +741,22 @@ function Install-VSCodeExtensions {
   $extensionsDir = Join-Path $VSCodeDir 'data/extensions'
 
   foreach ($extensionId in $VSCodeExtensions) {
-    Write-Log "Installing VS Code extension: $extensionId" 'STEP'
+    Write-Log "Installing VS Code extension: $extensionId" 'STEP' -LogOnly
     Invoke-Checked -FilePath $codeCmd -Arguments @(
       '--user-data-dir', $userDataDir,
       '--extensions-dir', $extensionsDir,
       '--install-extension', $extensionId,
       '--force'
-    )
+    ) -LogOnly
   }
 }
 
+<#
+.SYNOPSIS
+cmd launcher から扱いやすいパス表現を取得します。
+.PARAMETER Path
+変換するパスです。
+#>
 function Get-CmdSafePath {
     param([Parameter(Mandatory)][string]$Path)
 
@@ -554,27 +778,36 @@ function Get-CmdSafePath {
   return [IO.Path]::GetFullPath($Path)
 }
 
+<#
+.SYNOPSIS
+Root 直下に VS Code、Cygwin、PowerShell の launcher を生成します。
+.PARAMETER VSCodeDir
+VS Code のインストール先ディレクトリです。
+.PARAMETER CygwinDir
+Cygwin のインストール先ディレクトリです。
+.PARAMETER PowerShellPathEntries
+PowerShell launcher 用 PATH に追加するディレクトリ一覧です。
+.PARAMETER CygwinPathEntries
+Cygwin launcher 用 PATH に追加するディレクトリ一覧です。
+#>
 function Write-Launchers {
     param(
     [Parameter(Mandatory)][string]$VSCodeDir,
     [Parameter(Mandatory)][string]$CygwinDir,
-    [Parameter(Mandatory)][string]$RustupDir,
-    [Parameter(Mandatory)][string]$CargoDir,
     [Parameter(Mandatory)][string[]]$PowerShellPathEntries,
     [Parameter(Mandatory)][string[]]$CygwinPathEntries
   )
-  $vscodeBat = Join-Path $Root 'VSCode.bat'
   $vscodeCmd = Join-Path $Root 'VSCode.cmd'
-  $cygwinBat = Join-Path $Root 'Cygwin.bat'
   $cygwinCmd = Join-Path $Root 'Cygwin.cmd'
   $powerShellCmd = Join-Path $Root 'PowerShell.cmd'
   $launcherRoot = Get-CmdSafePath $Root
+  $launcherPath = ($PowerShellPathEntries | ForEach-Object { '%ROOT%' + $_.Substring($Root.Length) }) -join ';'
   $vscode = @"
 @echo off
 setlocal enableextensions
 pushd "$launcherRoot" || exit /b 1
 set "ROOT=%CD%"
-set "PATH=%ROOT%\.local\opt\python;%ROOT%\.local\opt\python\Scripts;%ROOT%\.local\opt\nodejs;%ROOT%\.local\opt\uv;%ROOT%\.local\opt\jq;%ROOT%\.local\opt\pandoc;%ROOT%\.local\opt\ripgrep;%ROOT%\.local\opt\cargo\bin;%ROOT%\.local\opt\vscode\bin;%PATH%"
+set "PATH=$launcherPath;%PATH%"
 set "TEMP=%ROOT%\.local\tmp"
 set "TMP=%ROOT%\.local\tmp"
 set "PIP_CONFIG_FILE=%ROOT%\.config\pip\pip.ini"
@@ -582,8 +815,6 @@ set "PIP_CACHE_DIR=%ROOT%\.local\pkg\pip-cache"
 set "UV_CACHE_DIR=%ROOT%\.local\pkg\uv-cache"
 set "npm_config_cache=%ROOT%\.local\pkg\npm-cache"
 set "npm_config_prefix=%ROOT%\.local\opt\nodejs"
-set "RUSTUP_HOME=%ROOT%\.local\opt\rustup"
-set "CARGO_HOME=%ROOT%\.local\opt\cargo"
 set "CODE=%ROOT%\.local\opt\vscode\Code.exe"
 set "VSCODE_USER_DATA=%ROOT%\.local\opt\vscode\data\user-data"
 set "VSCODE_EXTENSIONS=%ROOT%\.local\opt\vscode\data\extensions"
@@ -618,7 +849,7 @@ popd
 setlocal enableextensions
 pushd "$launcherRoot" || exit /b 1
 set "ROOT=%CD%"
-set "PATH=%ROOT%\.local\opt\python;%ROOT%\.local\opt\python\Scripts;%ROOT%\.local\opt\nodejs;%ROOT%\.local\opt\uv;%ROOT%\.local\opt\jq;%ROOT%\.local\opt\pandoc;%ROOT%\.local\opt\ripgrep;%ROOT%\.local\opt\cargo\bin;%ROOT%\.local\opt\vscode\bin;%PATH%"
+set "PATH=$launcherPath;%PATH%"
 set "TEMP=%ROOT%\.local\tmp"
 set "TMP=%ROOT%\.local\tmp"
 set "PIP_CONFIG_FILE=%ROOT%\.config\pip\pip.ini"
@@ -626,8 +857,6 @@ set "PIP_CACHE_DIR=%ROOT%\.local\pkg\pip-cache"
 set "UV_CACHE_DIR=%ROOT%\.local\pkg\uv-cache"
 set "npm_config_cache=%ROOT%\.local\pkg\npm-cache"
 set "npm_config_prefix=%ROOT%\.local\opt\nodejs"
-set "RUSTUP_HOME=%ROOT%\.local\opt\rustup"
-set "CARGO_HOME=%ROOT%\.local\opt\cargo"
 set "CODEX_HOME=%ROOT%\.config\codex"
 set "CODEX_SQLITE_HOME=%ROOT%\.cache\codex"
 set "LITELLM_API_KEY=sk-litellm-master-key"
@@ -635,13 +864,21 @@ powershell.exe -NoLogo
 popd
 endlocal
 "@
-  Set-Content -LiteralPath $vscodeBat -Value $vscode -Encoding ASCII
   Set-Content -LiteralPath $vscodeCmd -Value $vscode -Encoding ASCII
-  Set-Content -LiteralPath $cygwinBat -Value $cygwin -Encoding ASCII
   Set-Content -LiteralPath $cygwinCmd -Value $cygwin -Encoding ASCII
   Set-Content -LiteralPath $powerShellCmd -Value $powerShell -Encoding ASCII
 }
 
+<#
+.SYNOPSIS
+指定された実行ファイルの存在とバージョンコマンドを確認します。
+.PARAMETER Name
+ログに表示するツール名です。
+.PARAMETER FilePath
+確認する実行ファイルのパスです。
+.PARAMETER VersionArgs
+バージョン確認に使う引数です。
+#>
 function Test-CommandFile {
     param(
     [Parameter(Mandatory)][string]$Name,
@@ -675,13 +912,22 @@ try {
   $UvDir     = Join-Path $OptDir 'uv'
   $JqDir     = Join-Path $OptDir 'jq'
   $PandocDir = Join-Path $OptDir 'pandoc'
-  $RipgrepDir = Join-Path $OptDir 'ripgrep'
-  $RustupDir = Join-Path $OptDir 'rustup'
-  $CargoDir  = Join-Path $OptDir 'cargo'
   $VSCodeDir = Join-Path $OptDir 'vscode'
   $CygwinDir = Join-Path $OptDir 'cygwin'
+  $PortableToolDirs = @{
+    bat = Join-Path $OptDir 'bat'
+    bottom = Join-Path $OptDir 'bottom'
+    delta = Join-Path $OptDir 'delta'
+    dust = Join-Path $OptDir 'dust'
+    eza = Join-Path $OptDir 'eza'
+    fd = Join-Path $OptDir 'fd'
+    genact = Join-Path $OptDir 'genact'
+    hyperfine = Join-Path $OptDir 'hyperfine'
+    procs = Join-Path $OptDir 'procs'
+    ripgrep = Join-Path $OptDir 'ripgrep'
+  }
 
-  foreach ($p in @($PythonDir,$NodeDir,$UvDir,$JqDir,$PandocDir,$RipgrepDir,$RustupDir,$CargoDir,$VSCodeDir,$CygwinDir)) { Assert-UnderDesktop $p }
+  foreach ($p in @($PythonDir,$NodeDir,$UvDir,$JqDir,$PandocDir,$VSCodeDir,$CygwinDir) + $PortableToolDirs.Values) { Assert-UnderDesktop $p }
 
   Install-PythonEmbedded $PythonDir
   $PythonExe = Join-Path $PythonDir 'python.exe'
@@ -694,8 +940,7 @@ try {
   Install-UvZip $UvDir
   Install-JqExe $JqDir
   Install-PandocZip $PandocDir
-  Install-RipgrepZip $RipgrepDir
-  Install-Rust $RustupDir $CargoDir
+  Install-PortableCliTools -Destinations $PortableToolDirs
   Install-VSCodeZip $VSCodeDir
   Install-Cygwin $CygwinDir
 
@@ -704,9 +949,16 @@ try {
   $UvExe = Join-Path $UvDir 'uv.exe'
   $JqExe = Join-Path $JqDir 'jq.exe'
   $PandocExe = Join-Path $PandocDir 'pandoc.exe'
-  $RipgrepExe = Join-Path $RipgrepDir 'rg.exe'
-  $RustcExe = Join-Path $CargoDir 'bin/rustc.exe'
-  $CargoExe = Join-Path $CargoDir 'bin/cargo.exe'
+  $BatExe = Join-Path $PortableToolDirs.bat 'bat.exe'
+  $BottomExe = Join-Path $PortableToolDirs.bottom 'btm.exe'
+  $DeltaExe = Join-Path $PortableToolDirs.delta 'delta.exe'
+  $DustExe = Join-Path $PortableToolDirs.dust 'dust.exe'
+  $EzaExe = Join-Path $PortableToolDirs.eza 'eza.exe'
+  $FdExe = Join-Path $PortableToolDirs.fd 'fd.exe'
+  $GenactExe = Join-Path $PortableToolDirs.genact 'genact.exe'
+  $HyperfineExe = Join-Path $PortableToolDirs.hyperfine 'hyperfine.exe'
+  $ProcsExe = Join-Path $PortableToolDirs.procs 'procs.exe'
+  $RipgrepExe = Join-Path $PortableToolDirs.ripgrep 'rg.exe'
   $CodeCmd = Join-Path $VSCodeDir 'bin/code.cmd'
   $BashExe = Join-Path $CygwinDir 'bin/bash.exe'
 
@@ -717,8 +969,16 @@ try {
     $UvDir,
     $JqDir,
     $PandocDir,
-    $RipgrepDir,
-    (Join-Path $CargoDir 'bin'),
+    $PortableToolDirs.bat,
+    $PortableToolDirs.bottom,
+    $PortableToolDirs.delta,
+    $PortableToolDirs.dust,
+    $PortableToolDirs.eza,
+    $PortableToolDirs.fd,
+    $PortableToolDirs.genact,
+    $PortableToolDirs.hyperfine,
+    $PortableToolDirs.procs,
+    $PortableToolDirs.ripgrep,
     (Join-Path $VSCodeDir 'bin')
   ) | Where-Object { Test-Path -LiteralPath $_ }
 
@@ -734,19 +994,17 @@ try {
   $env:UV_CACHE_DIR = Join-Path $PkgDir 'uv-cache'
   $env:npm_config_cache = Join-Path $PkgDir 'npm-cache'
   $env:npm_config_prefix = $NodeDir
-  $env:RUSTUP_HOME = $RustupDir
-  $env:CARGO_HOME  = $CargoDir
 
-  Write-VSCodeSettings -VSCodeDir $VSCodeDir -CygwinDir $CygwinDir -RustupDir $RustupDir -CargoDir $CargoDir -PowerShellPathEntries $PowerShellPathEntries -CygwinPathEntries $CygwinPathEntries
+  Write-VSCodeSettings -VSCodeDir $VSCodeDir -CygwinDir $CygwinDir -PowerShellPathEntries $PowerShellPathEntries -CygwinPathEntries $CygwinPathEntries
   Write-VSCodeExtensionRecommendations -VSCodeDir $VSCodeDir
   Install-VSCodeExtensions -VSCodeDir $VSCodeDir
-  Write-Launchers -VSCodeDir $VSCodeDir -CygwinDir $CygwinDir -RustupDir $RustupDir -CargoDir $CargoDir -PowerShellPathEntries $PowerShellPathEntries -CygwinPathEntries $CygwinPathEntries
+  Write-Launchers -VSCodeDir $VSCodeDir -CygwinDir $CygwinDir -PowerShellPathEntries $PowerShellPathEntries -CygwinPathEntries $CygwinPathEntries
 
-  Write-Log "pip packages installing..." 'STEP'
-  Invoke-Checked -FilePath $PipCmd -Arguments @('install', '--no-warn-script-location', 'setuptools', 'wheel')
-  Invoke-Checked -FilePath $PipCmd -Arguments @('install', '--no-cache-dir', 'python-docx', 'pypdf', 'Pillow')
-  Write-Log "npm packages installing..." 'STEP'
-  Invoke-Checked -FilePath $NpmCmd -Arguments @('install', '-g', 'npm', 'cowsay')
+  Write-Log "pip packages installing..." 'STEP' -LogOnly
+  Invoke-Checked -FilePath $PipCmd -Arguments @('install', '--no-warn-script-location', 'setuptools', 'wheel') -LogOnly
+  Invoke-Checked -FilePath $PipCmd -Arguments @('install', '--no-cache-dir', 'python-docx', 'pypdf', 'Pillow') -LogOnly
+  Write-Log "npm packages installing..." 'STEP' -LogOnly
+  Invoke-Checked -FilePath $NpmCmd -Arguments @('install', '-g', 'npm', 'cowsay') -LogOnly
 
   Test-CommandFile 'python' $PythonExe @('--version')
   Test-CommandFile 'pip' $PipCmd @('--version')
@@ -755,14 +1013,22 @@ try {
   Test-CommandFile 'uv' $UvExe @('--version')
   Test-CommandFile 'jq' $JqExe @('--version')
   Test-CommandFile 'pandoc' $PandocExe @('--version')
+  Test-CommandFile 'bat' $BatExe @('--version')
+  Test-CommandFile 'bottom' $BottomExe @('--version')
+  Test-CommandFile 'delta' $DeltaExe @('--version')
+  Test-CommandFile 'dust' $DustExe @('--version')
+  Test-CommandFile 'eza' $EzaExe @('--version')
+  Test-CommandFile 'fd' $FdExe @('--version')
+  Test-CommandFile 'genact' $GenactExe @('--version')
+  Test-CommandFile 'hyperfine' $HyperfineExe @('--version')
+  Test-CommandFile 'procs' $ProcsExe @('--version')
   Test-CommandFile 'ripgrep' $RipgrepExe @('--version')
-  Test-CommandFile 'rustc' $RustcExe @('--version')
-  Test-CommandFile 'cargo' $CargoExe @('--version')
   Test-CommandFile 'code' $CodeCmd @('--version')
   Test-CommandFile 'cygwin bash' $BashExe @('--version')
 
-  Write-Log "VSCode launcher: $(Join-Path $Root 'VSCode.bat')" 'STEP'
-  Write-Log "Cygwin launcher: $(Join-Path $Root 'Cygwin.bat')" 'STEP'
+  Write-Log "VSCode launcher: $(Join-Path $Root 'VSCode.cmd')" 'STEP'
+  Write-Log "Cygwin launcher: $(Join-Path $Root 'Cygwin.cmd')" 'STEP'
+  Write-Log "PowerShell launcher: $(Join-Path $Root 'PowerShell.cmd')" 'STEP'
   Write-Log "Installation completed" 'OK'
 
 } catch {

@@ -1,68 +1,99 @@
-# pdev-win
+# 🧰 pdev: Portable Development Environment for Highly Restricted Windows
 
-`pdev-win` は、Windows の `Desktop` 配下だけを使ってポータブル開発環境を構築する PowerShell スクリプトです。
+`pdev` は、Windows の Desktop 配下にポータブル開発環境を作成する PowerShell スクリプトです。
 
-管理者権限なしで、Python / pip / Node.js / uv / jq / pandoc / VS Code / Cygwin を `$Root` 配下に配置します。インストール後は VS Code と Cygwin の起動バッチも生成されます。
+管理者権限を使わず、Python、Node.js、VS Code、Cygwin、便利な CLI tools を検証済みの `$Root` 配下に配置します。既定のインストール先は、OS が解決した Desktop 配下の `pdev` です。
 
-## Quick Start
-
-PowerShell を開き、以下を実行します。
-
-```powershell
-iwr https://raw.githubusercontent.com/k5-mot/pdev-win/main/setup.ps1 | iex
-```
-
-既定のインストール先は `$env:USERPROFILE\Desktop\pdev` です。
-
-## Targets
-
-- Windows PowerShell 5+。
-- 管理者権限なし。
-- インストール先は `Desktop` 配下。
-- ネットワークから各ツールの zip、exe、wheel を取得できる環境。
-
-## Documentation
-
-- セットアップ手順: [docs/USAGE.md](docs/USAGE.md)
-- 検証手順: [docs/TESTING.md](docs/TESTING.md)
-- 仕様: [docs/SPEC.md](docs/SPEC.md)
-
-## Installed Tools
+## 🧩 Installed Tools
 
 - Python / pip
 - Node.js / npm
 - uv
 - jq
 - pandoc
+- bat
+- bottom
+- delta
+- dust
+- eza
+- fd
+- genact
+- hyperfine
+- procs
+- ripgrep
 - Visual Studio Code
 - Cygwin
 
-## Output
+Python には `setuptools`、`wheel`、`python-docx`、`pypdf`、`Pillow` も追加します。Node.js には npm global package として `npm` と `cowsay` をインストールします。
 
-既定では以下に環境を作成します。
+## ⚡ One-Liner
 
-```text
-%USERPROFILE%\Desktop\pdev\
-  .local\
-  .config\
-  VSCode.bat
-  Cygwin.bat
-```
-
-セットアップ完了後は、`VSCode.bat` または `Cygwin.bat` から起動します。
-
-## Coding Agent Setup
-
-コーディングエージェント用の設定を使う場合は、セットアップ後に以下を実行します。
+PowerShell を開き、以下を実行します。
 
 ```powershell
-$Root = "$env:USERPROFILE\Desktop\pdev"
-
-New-Item -ItemType Directory -Force -Path "$Root\.claude" | Out-Null
-Copy-Item -Force ".\.claude\settings.json" "$Root\.claude\settings.json"
-
-New-Item -ItemType Directory -Force -Path "$Root\.config\codex" | Out-Null
-Copy-Item -Force ".\.codex\config.toml" "$Root\.config\codex\config.toml"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_v4.ps1 -Root "$env:USERPROFILE\Desktop\pdev"
 ```
 
-`$Root` を変更してセットアップした場合は、実際のインストール先に合わせて変更してください。
+既定の `Desktop` がリダイレクトされている環境では、必要に応じて `[Environment]::GetFolderPath('Desktop')` で取得したパスを `-Root` に指定してください。
+
+## 🪜 Step-by-Step
+
+スクリプトを確認してから実行したい場合:
+
+```powershell
+# 1. リポジトリの作業ディレクトリへ移動する。
+cd "$env:USERPROFILE\Desktop\pdev-win"
+
+# 2. Desktop 配下へ portable environment を作成する。
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_v4.ps1 -Root "$env:USERPROFILE\Desktop\pdev"
+```
+
+既存キャッシュや展開先を上書きする場合は `-Force` を付けます。
+
+```powershell
+# 既存のダウンロードキャッシュや展開先を再作成する。
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_v4.ps1 `
+  -Root "$env:USERPROFILE\Desktop\pdev" `
+  -Force
+```
+
+## 🚀 Launch
+
+セットアップ完了後、Root 直下のランチャーから起動します。
+
+VS Code:
+
+```powershell
+# 1. 既定の Root を組み立てる。
+$Root = Join-Path ([Environment]::GetFolderPath('Desktop')) 'pdev'
+
+# 2. VS Code launcher を起動する。
+& "$Root\VSCode.cmd"
+```
+
+Cygwin:
+
+```powershell
+# 1. 既定の Root を組み立てる。
+$Root = Join-Path ([Environment]::GetFolderPath('Desktop')) 'pdev'
+
+# 2. Cygwin launcher を起動する。
+& "$Root\Cygwin.cmd"
+```
+
+Portable PowerShell:
+
+```powershell
+# 1. 既定の Root を組み立てる。
+$Root = Join-Path ([Environment]::GetFolderPath('Desktop')) 'pdev'
+
+# 2. portable PowerShell launcher を起動する。
+& "$Root\PowerShell.cmd"
+```
+
+## 📚 Documentation
+
+- 仕様とディレクトリ構成: [docs/SPEC.md](docs/SPEC.md)
+- トラブルシューティング: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
+- コーディング規約: [docs/CODING_RULES.md](docs/CODING_RULES.md)
+- image download scripts: [scripts/README.md](scripts/README.md)
