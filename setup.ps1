@@ -488,7 +488,12 @@ function Get-GitHubReleaseAsset {
     [Parameter(Mandatory)][string]$AssetPattern
   )
 
-  $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases" -UseBasicParsing
+  $headers = @{}
+  if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
+    $headers.Authorization = "Bearer $env:GITHUB_TOKEN"
+  }
+
+  $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases" -Headers $headers -UseBasicParsing
   foreach ($release in $releases) {
     if ($release.draft -or $release.prerelease) { continue }
     $asset = @($release.assets | Where-Object { $_.name -match $AssetPattern } | Select-Object -First 1)
@@ -821,10 +826,6 @@ portable tools 用の cmd shim を .local/bin にまとめて生成します。
 #>
 function Write-PortableBinShims {
   $shims = @(
-    @{ Name='python.cmd'; Target='.local/opt/python/python.exe' },
-    @{ Name='pip.cmd'; Target='.local/opt/python/Scripts/pip.cmd' },
-    @{ Name='node.cmd'; Target='.local/opt/nodejs/node.exe' },
-    @{ Name='npm.cmd'; Target='.local/opt/nodejs/npm.cmd' },
     @{ Name='uv.cmd'; Target='.local/opt/uv/uv.exe' },
     @{ Name='jq.cmd'; Target='.local/opt/jq/jq.exe' },
     @{ Name='pandoc.cmd'; Target='.local/opt/pandoc/pandoc.exe' },
@@ -837,8 +838,7 @@ function Write-PortableBinShims {
     @{ Name='genact.cmd'; Target='.local/opt/genact/genact.exe' },
     @{ Name='hyperfine.cmd'; Target='.local/opt/hyperfine/hyperfine.exe' },
     @{ Name='procs.cmd'; Target='.local/opt/procs/procs.exe' },
-    @{ Name='rg.cmd'; Target='.local/opt/ripgrep/rg.exe' },
-    @{ Name='code.cmd'; Target='.local/opt/vscode/bin/code.cmd' }
+    @{ Name='rg.cmd'; Target='.local/opt/ripgrep/rg.exe' }
   )
 
   foreach ($shim in $shims) {
@@ -1044,10 +1044,7 @@ try {
   Install-Cygwin -Destination $CygwinDir -Packages $CygwinPackages
   Write-PortableBinShims
 
-  $PythonCmd = Join-Path $BinDir 'python.cmd'
-  $PipCmdShim = Join-Path $BinDir 'pip.cmd'
-  $NodeCmd = Join-Path $BinDir 'node.cmd'
-  $NpmCmdShim = Join-Path $BinDir 'npm.cmd'
+  $NodeExe = Join-Path $NodeDir 'node.exe'
   $UvCmd = Join-Path $BinDir 'uv.cmd'
   $JqCmd = Join-Path $BinDir 'jq.cmd'
   $PandocCmd = Join-Path $BinDir 'pandoc.cmd'
@@ -1061,11 +1058,16 @@ try {
   $HyperfineCmd = Join-Path $BinDir 'hyperfine.cmd'
   $ProcsCmd = Join-Path $BinDir 'procs.cmd'
   $RipgrepCmd = Join-Path $BinDir 'rg.cmd'
-  $CodeCmd = Join-Path $BinDir 'code.cmd'
+  $CodeCmd = Join-Path $VSCodeDir 'bin/code.cmd'
   $BashExe = Join-Path $CygwinDir 'bin/bash.exe'
 
   $PowerShellPathEntries = @(
-    $BinDir
+    $BinDir,
+    $PythonDir,
+    (Join-Path $PythonDir 'Scripts'),
+    $NodeDir,
+    (Join-Path $VSCodeDir 'bin'),
+    (Join-Path $CygwinDir 'bin')
   ) | Where-Object { Test-Path -LiteralPath $_ }
 
   $CygwinPathEntries = @(
@@ -1091,13 +1093,12 @@ try {
   Invoke-Checked -FilePath $PipCmd -Arguments @('install', '--no-cache-dir', 'python-docx', 'pypdf', 'Pillow') -LogOnly
   Write-Log "npm packages installing..." 'STEP' -LogOnly
   Invoke-Checked -FilePath $NpmCmd -Arguments @('install', '-g', 'npm', 'cowsay') -LogOnly
-  Write-CmdShim -Name 'cowsay.cmd' -TargetRelativePath '.local/opt/nodejs/cowsay.cmd'
-  $CowsayCmd = Join-Path $BinDir 'cowsay.cmd'
+  $CowsayCmd = Join-Path $NodeDir 'cowsay.cmd'
 
-  Test-CommandFile 'python' $PythonCmd @('--version')
-  Test-CommandFile 'pip' $PipCmdShim @('--version')
-  Test-CommandFile 'node' $NodeCmd @('--version')
-  Test-CommandFile 'npm' $NpmCmdShim @('--version')
+  Test-CommandFile 'python' $PythonExe @('--version')
+  Test-CommandFile 'pip' $PipCmd @('--version')
+  Test-CommandFile 'node' $NodeExe @('--version')
+  Test-CommandFile 'npm' $NpmCmd @('--version')
   Test-CommandFile 'uv' $UvCmd @('--version')
   Test-CommandFile 'jq' $JqCmd @('--version')
   Test-CommandFile 'pandoc' $PandocCmd @('--version')

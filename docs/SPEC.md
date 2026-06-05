@@ -50,10 +50,9 @@
 pdev/
   .local/
     bin/
-      python.cmd
-      pip.cmd
-      node.cmd
-      npm.cmd
+      uv.cmd
+      jq.cmd
+      pandoc.cmd
       rg.cmd
       ...
     opt/
@@ -94,11 +93,11 @@ pdev/
   PowerShell.cmd
 ```
 
-Root 直下にはランチャーのみを置き、ツール本体、設定、キャッシュ、ログ、一時ファイルは `$Root` 配下のサブディレクトリへ分ける。PowerShell / VS Code 用 PATH は `.local/bin` を主入口とし、各ツール本体は `.local/opt` 配下へ保持する。
+Root 直下にはランチャーのみを置き、ツール本体、設定、キャッシュ、ログ、一時ファイルは `$Root` 配下のサブディレクトリへ分ける。固定的に導入する単体 CLI は `.local/bin` の shim を主入口とし、Python、Node.js、VS Code、Cygwin は追加コマンドや周辺ファイルを自然に扱えるよう `.local/opt` 配下の実体ディレクトリを PATH に追加する。
 
 ### 3.1 `.local/bin`
 
-PATH に追加する cmd shim を格納する。shim は `.local/opt` 配下の実体コマンドへ処理を委譲する。
+PATH に追加する cmd shim を格納する。shim は `.local/opt` 配下の実体コマンドへ処理を委譲する。pip や npm が後から生成するコマンドは shim 化せず、それぞれの実体ディレクトリを PATH に入れて利用する。
 
 ### 3.2 `.local/opt`
 
@@ -190,8 +189,8 @@ PowerShell スクリプトは以下を実行する。
 10. GitHub Releases から portable CLI tools の Windows x64 asset を取得し、`.local\opt` 配下に展開または配置する。
 11. VS Code portable mode 用の `data` ディレクトリを作成する。
 12. Cygwin mirror を選択し、公式 `setup-x86_64.exe` を CLI 実行する。
-13. `.local\bin` に cmd shim を生成する。
-14. 現プロセスの PATH とキャッシュ関連環境変数を構成する。
+13. 固定 CLI 用の cmd shim を `.local\bin` に生成する。
+14. 現プロセスの PATH に `.local\bin` と必要な `.local\opt` 配下の実体ディレクトリを追加し、キャッシュ関連環境変数を構成する。
 15. VS Code settings と extensions recommendation を生成する。
 16. VS Code CLI で拡張機能を portable extensions dir にインストールする。
 17. `$Root\VSCode.cmd`、`$Root\Cygwin.cmd`、`$Root\PowerShell.cmd` を生成する。
@@ -266,7 +265,7 @@ PowerShell スクリプト内で `$Root\VSCode.cmd`、`$Root\Cygwin.cmd`、`$Roo
 
 ### 12.1 `VSCode.cmd`
 
-- ランチャー内で PATH に `.local\bin` を追加する。
+- ランチャー内で PATH に `.local\bin` と必要な `.local\opt` 配下の実体ディレクトリを追加する。
 - `PIP_CONFIG_FILE`、`PIP_CACHE_DIR`、`UV_CACHE_DIR`、`npm_config_cache` を設定する。
 - `CODEX_HOME`、`CODEX_SQLITE_HOME`、`LITELLM_API_KEY` を設定する。必要なディレクトリは利用するツール側で作成される想定とする。
 - `Code.exe` を `start "" /min` で起動する。
@@ -281,7 +280,7 @@ PowerShell スクリプト内で `$Root\VSCode.cmd`、`$Root\Cygwin.cmd`、`$Roo
 
 ### 12.3 `PowerShell.cmd`
 
-- ランチャー内で PATH に `.local\bin` を追加し、キャッシュ関連環境変数をポータブル環境向けに設定する。
+- ランチャー内で PATH に `.local\bin` と必要な `.local\opt` 配下の実体ディレクトリを追加し、キャッシュ関連環境変数をポータブル環境向けに設定する。
 - Windows PowerShell を起動する。
 
 インストール完了後、VS Code は自動起動しない。ログに各ランチャーのパスを表示する。
