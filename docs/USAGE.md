@@ -31,8 +31,7 @@ Invoke-WebRequest `
   -UseBasicParsing
 
 # 3. セットアップスクリプトを実行する。
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 `
-  -Root "$env:USERPROFILE\Desktop\pdev"
+Remove-Item -Recurse -Force "$env:USERPROFILE\Desktop\pdev"; powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_v4.ps1 -Root "$env:USERPROFILE\Desktop\pdev"
 ```
 
 `-Root` を指定する場合は、必ず `Desktop` 配下のパスにしてください。
