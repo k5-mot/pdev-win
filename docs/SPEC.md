@@ -1,6 +1,6 @@
 # 📘 Specification
 
-この仕様は `setup_v4.ps1` の現在の実装を正として記述する。
+この仕様は `setup.ps1` の現在の実装を正として記述する。
 
 ## 1. 🎯 目的
 
@@ -114,14 +114,14 @@ pip 設定を格納する。
 リモートから直接実行する場合:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; iex ((New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/k5-mot/pdev-win/main/setup_v4.ps1'))"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; iex ((New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/k5-mot/pdev-win/main/setup.ps1'))"
 ```
 
 ローカルのリポジトリから実行する場合:
 
 ```powershell
-# ローカルの setup_v4.ps1 を実行し、Desktop 配下へ Root を作成する。
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_v4.ps1 `
+# ローカルの setup.ps1 を実行し、Desktop 配下へ Root を作成する。
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 `
   -Root (Join-Path ([Environment]::GetFolderPath('Desktop')) 'pdev')
 ```
 

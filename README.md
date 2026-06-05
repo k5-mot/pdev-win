@@ -31,7 +31,7 @@ Python には `setuptools`、`wheel`、`python-docx`、`pypdf`、`Pillow` も追
 PowerShell を開き、以下を実行します。
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_v4.ps1 -Root "$env:USERPROFILE\Desktop\pdev"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -Root "$env:USERPROFILE\Desktop\pdev"
 ```
 
 既定の `Desktop` がリダイレクトされている環境では、必要に応じて `[Environment]::GetFolderPath('Desktop')` で取得したパスを `-Root` に指定してください。
@@ -45,14 +45,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_v4.ps1 -Root "$env:U
 cd "$env:USERPROFILE\Desktop\pdev-win"
 
 # 2. Desktop 配下へ portable environment を作成する。
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_v4.ps1 -Root "$env:USERPROFILE\Desktop\pdev"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -Root "$env:USERPROFILE\Desktop\pdev"
 ```
 
 既存キャッシュや展開先を上書きする場合は `-Force` を付けます。
 
 ```powershell
 # 既存のダウンロードキャッシュや展開先を再作成する。
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_v4.ps1 `
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 `
   -Root "$env:USERPROFILE\Desktop\pdev" `
   -Force
 ```

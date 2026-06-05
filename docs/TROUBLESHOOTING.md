@@ -33,7 +33,7 @@ Get-ChildItem "$Root\.local\pkg"
 
 ```powershell
 # キャッシュや展開済みファイルを上書きして再実行する。
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_v4.ps1 `
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 `
   -Root (Join-Path ([Environment]::GetFolderPath('Desktop')) 'pdev') `
   -Force
 ```
