@@ -39,7 +39,7 @@
 - AppData など既定ユーザー領域への設定・キャッシュ書き込みに依存しない。
 - バイナリ、ユーザーデータ、設定、キャッシュ、ログ、一時ファイルは原則として `$Root` 配下に配置する。
 - ランチャーはネットワークパスでも起動できるよう、実行前に作業ディレクトリを確立する。
-- 検証時はユーザーまたはシステム PATH 上の同名ツールではなく、検証済み `$Root` から組み立てた実体パスを優先する。
+- 検証時はユーザーまたはシステム PATH 上の同名ツールではなく、検証済み `$Root` 配下の shim または実体パスを優先する。
 - インストール時に GitHub、Python.org、Node.js、PyPI、VS Code update endpoint、Cygwin mirror へアクセスする。
 
 ## 3. 🗂️ ディレクトリ構成
@@ -49,6 +49,13 @@
 ```text
 pdev/
   .local/
+    bin/
+      python.cmd
+      pip.cmd
+      node.cmd
+      npm.cmd
+      rg.cmd
+      ...
     opt/
       python/
       nodejs/
@@ -87,25 +94,29 @@ pdev/
   PowerShell.cmd
 ```
 
-Root 直下にはランチャーのみを置き、ツール本体、設定、キャッシュ、ログ、一時ファイルは `$Root` 配下のサブディレクトリへ分ける。
+Root 直下にはランチャーのみを置き、ツール本体、設定、キャッシュ、ログ、一時ファイルは `$Root` 配下のサブディレクトリへ分ける。PowerShell / VS Code 用 PATH は `.local/bin` を主入口とし、各ツール本体は `.local/opt` 配下へ保持する。
 
-### 3.1 `.local/opt`
+### 3.1 `.local/bin`
+
+PATH に追加する cmd shim を格納する。shim は `.local/opt` 配下の実体コマンドへ処理を委譲する。
+
+### 3.2 `.local/opt`
 
 展開済みのツール本体を格納する。
 
-### 3.2 `.local/pkg`
+### 3.3 `.local/pkg`
 
 ダウンロードした zip、exe、wheel と、各種パッケージキャッシュを格納する。
 
-### 3.3 `.local/logs`
+### 3.4 `.local/logs`
 
 `install-*.log` を格納する。
 
-### 3.4 `.local/tmp`
+### 3.5 `.local/tmp`
 
 zip 展開などの一時ファイルを格納する。
 
-### 3.5 `.config`
+### 3.6 `.config`
 
 pip 設定を格納する。
 
@@ -179,12 +190,13 @@ PowerShell スクリプトは以下を実行する。
 10. GitHub Releases から portable CLI tools の Windows x64 asset を取得し、`.local\opt` 配下に展開または配置する。
 11. VS Code portable mode 用の `data` ディレクトリを作成する。
 12. Cygwin mirror を選択し、公式 `setup-x86_64.exe` を CLI 実行する。
-13. 現プロセスの PATH とキャッシュ関連環境変数を構成する。
-14. VS Code settings と extensions recommendation を生成する。
-15. VS Code CLI で拡張機能を portable extensions dir にインストールする。
-16. `$Root\VSCode.cmd`、`$Root\Cygwin.cmd`、`$Root\PowerShell.cmd` を生成する。
-17. pip と npm の追加パッケージをインストールする。
-18. 各ツールの実体パスが存在し、バージョンコマンドが実行できることを検証する。
+13. `.local\bin` に cmd shim を生成する。
+14. 現プロセスの PATH とキャッシュ関連環境変数を構成する。
+15. VS Code settings と extensions recommendation を生成する。
+16. VS Code CLI で拡張機能を portable extensions dir にインストールする。
+17. `$Root\VSCode.cmd`、`$Root\Cygwin.cmd`、`$Root\PowerShell.cmd` を生成する。
+18. pip と npm の追加パッケージをインストールする。
+19. 各ツールの shim または実体パスが存在し、バージョンコマンドが実行できることを検証する。
 
 ## 7. 🐍 pip 要件
 
@@ -254,7 +266,7 @@ PowerShell スクリプト内で `$Root\VSCode.cmd`、`$Root\Cygwin.cmd`、`$Roo
 
 ### 12.1 `VSCode.cmd`
 
-- ランチャー内で PATH をポータブル環境向けに設定する。
+- ランチャー内で PATH に `.local\bin` を追加する。
 - `PIP_CONFIG_FILE`、`PIP_CACHE_DIR`、`UV_CACHE_DIR`、`npm_config_cache` を設定する。
 - `CODEX_HOME`、`CODEX_SQLITE_HOME`、`LITELLM_API_KEY` を設定する。必要なディレクトリは利用するツール側で作成される想定とする。
 - `Code.exe` を `start "" /min` で起動する。
@@ -269,7 +281,7 @@ PowerShell スクリプト内で `$Root\VSCode.cmd`、`$Root\Cygwin.cmd`、`$Roo
 
 ### 12.3 `PowerShell.cmd`
 
-- ランチャー内で PATH とキャッシュ関連環境変数をポータブル環境向けに設定する。
+- ランチャー内で PATH に `.local\bin` を追加し、キャッシュ関連環境変数をポータブル環境向けに設定する。
 - Windows PowerShell を起動する。
 
 インストール完了後、VS Code は自動起動しない。ログに各ランチャーのパスを表示する。

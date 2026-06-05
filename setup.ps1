@@ -41,6 +41,7 @@ if ([string]::IsNullOrWhiteSpace($Root)) {
 $Root = [IO.Path]::GetFullPath($Root)
 $PkgDir = Join-Path $Root '.local/pkg'
 $OptDir = Join-Path $Root '.local/opt'
+$BinDir = Join-Path $Root '.local/bin'
 $ConfigDir = Join-Path $Root '.config'
 $LogDir = Join-Path $Root '.local/logs'
 $TmpDir = Join-Path $Root '.local/tmp'
@@ -789,6 +790,64 @@ function Install-VSCodeExtensions {
 
 <#
 .SYNOPSIS
+.local/bin に配置する cmd shim を生成します。
+.PARAMETER Name
+生成する shim のファイル名です。
+.PARAMETER TargetRelativePath
+Root から見た実体コマンドの相対パスです。
+#>
+function Write-CmdShim {
+    param(
+    [Parameter(Mandatory)][string]$Name,
+    [Parameter(Mandatory)][string]$TargetRelativePath
+  )
+
+  New-Directory $BinDir
+  $shimPath = Join-Path $BinDir $Name
+  $target = $TargetRelativePath -replace '/', '\'
+  $body = @"
+@echo off
+setlocal
+set "ROOT=%~dp0..\.."
+"%ROOT%\$target" %*
+exit /b %ERRORLEVEL%
+"@
+  Set-Content -LiteralPath $shimPath -Value $body -Encoding ASCII
+}
+
+<#
+.SYNOPSIS
+portable tools 用の cmd shim を .local/bin にまとめて生成します。
+#>
+function Write-PortableBinShims {
+  $shims = @(
+    @{ Name='python.cmd'; Target='.local/opt/python/python.exe' },
+    @{ Name='pip.cmd'; Target='.local/opt/python/Scripts/pip.cmd' },
+    @{ Name='node.cmd'; Target='.local/opt/nodejs/node.exe' },
+    @{ Name='npm.cmd'; Target='.local/opt/nodejs/npm.cmd' },
+    @{ Name='uv.cmd'; Target='.local/opt/uv/uv.exe' },
+    @{ Name='jq.cmd'; Target='.local/opt/jq/jq.exe' },
+    @{ Name='pandoc.cmd'; Target='.local/opt/pandoc/pandoc.exe' },
+    @{ Name='bat.cmd'; Target='.local/opt/bat/bat.exe' },
+    @{ Name='btm.cmd'; Target='.local/opt/bottom/btm.exe' },
+    @{ Name='delta.cmd'; Target='.local/opt/delta/delta.exe' },
+    @{ Name='dust.cmd'; Target='.local/opt/dust/dust.exe' },
+    @{ Name='eza.cmd'; Target='.local/opt/eza/eza.exe' },
+    @{ Name='fd.cmd'; Target='.local/opt/fd/fd.exe' },
+    @{ Name='genact.cmd'; Target='.local/opt/genact/genact.exe' },
+    @{ Name='hyperfine.cmd'; Target='.local/opt/hyperfine/hyperfine.exe' },
+    @{ Name='procs.cmd'; Target='.local/opt/procs/procs.exe' },
+    @{ Name='rg.cmd'; Target='.local/opt/ripgrep/rg.exe' },
+    @{ Name='code.cmd'; Target='.local/opt/vscode/bin/code.cmd' }
+  )
+
+  foreach ($shim in $shims) {
+    Write-CmdShim -Name $shim.Name -TargetRelativePath $shim.Target
+  }
+}
+
+<#
+.SYNOPSIS
 cmd launcher から扱いやすいパス表現を取得します。
 .PARAMETER Path
 変換するパスです。
@@ -933,7 +992,7 @@ function Test-CommandFile {
 
 try {
   Assert-UnderDesktop $Root
-  foreach ($d in @($Root,$PkgDir,$OptDir,$ConfigDir,$LogDir,$TmpDir)) { New-Directory $d }
+  foreach ($d in @($Root,$PkgDir,$OptDir,$BinDir,$ConfigDir,$LogDir,$TmpDir)) { New-Directory $d }
   $env:TEMP = $TmpDir
   $env:TMP = $TmpDir
   Write-Log "Root: $Root" 'STEP'
@@ -963,7 +1022,7 @@ try {
     ripgrep = Join-Path $OptDir 'ripgrep'
   }
 
-  foreach ($p in @($PythonDir,$NodeDir,$UvDir,$JqDir,$PandocDir,$VSCodeDir,$CygwinDir) + $PortableToolDirs.Values) { Assert-UnderDesktop $p }
+  foreach ($p in @($PythonDir,$NodeDir,$UvDir,$JqDir,$PandocDir,$VSCodeDir,$CygwinDir,$BinDir) + $PortableToolDirs.Values) { Assert-UnderDesktop $p }
 
   Install-PythonEmbedded -Destination $PythonDir -Version $PythonVersion
   $PythonExe = Join-Path $PythonDir 'python.exe'
@@ -973,49 +1032,40 @@ try {
     throw "pip launcher was not created: $PipCmd"
   }
   Install-NodeZip -Destination $NodeDir -Version $NodeVersion
+  $NpmCmd = Join-Path $NodeDir 'npm.cmd'
+  if (-not (Test-Path -LiteralPath $NpmCmd)) {
+    throw "npm launcher was not created: $NpmCmd"
+  }
   Install-UvZip -Destination $UvDir -Version $UvVersion
   Install-JqExe -Destination $JqDir -Version $JqVersion
   Install-PandocZip -Destination $PandocDir -Version $PandocVersion
   Install-PortableCliTools -Destinations $PortableToolDirs
   Install-VSCodeZip -Destination $VSCodeDir -Version $VSCodeVersion
   Install-Cygwin -Destination $CygwinDir -Packages $CygwinPackages
+  Write-PortableBinShims
 
-  $NodeExe = Join-Path $NodeDir 'node.exe'
-  $NpmCmd = Join-Path $NodeDir 'npm.cmd'
-  $UvExe = Join-Path $UvDir 'uv.exe'
-  $JqExe = Join-Path $JqDir 'jq.exe'
-  $PandocExe = Join-Path $PandocDir 'pandoc.exe'
-  $BatExe = Join-Path $PortableToolDirs.bat 'bat.exe'
-  $BottomExe = Join-Path $PortableToolDirs.bottom 'btm.exe'
-  $DeltaExe = Join-Path $PortableToolDirs.delta 'delta.exe'
-  $DustExe = Join-Path $PortableToolDirs.dust 'dust.exe'
-  $EzaExe = Join-Path $PortableToolDirs.eza 'eza.exe'
-  $FdExe = Join-Path $PortableToolDirs.fd 'fd.exe'
-  $GenactExe = Join-Path $PortableToolDirs.genact 'genact.exe'
-  $HyperfineExe = Join-Path $PortableToolDirs.hyperfine 'hyperfine.exe'
-  $ProcsExe = Join-Path $PortableToolDirs.procs 'procs.exe'
-  $RipgrepExe = Join-Path $PortableToolDirs.ripgrep 'rg.exe'
-  $CodeCmd = Join-Path $VSCodeDir 'bin/code.cmd'
+  $PythonCmd = Join-Path $BinDir 'python.cmd'
+  $PipCmdShim = Join-Path $BinDir 'pip.cmd'
+  $NodeCmd = Join-Path $BinDir 'node.cmd'
+  $NpmCmdShim = Join-Path $BinDir 'npm.cmd'
+  $UvCmd = Join-Path $BinDir 'uv.cmd'
+  $JqCmd = Join-Path $BinDir 'jq.cmd'
+  $PandocCmd = Join-Path $BinDir 'pandoc.cmd'
+  $BatCmd = Join-Path $BinDir 'bat.cmd'
+  $BottomCmd = Join-Path $BinDir 'btm.cmd'
+  $DeltaCmd = Join-Path $BinDir 'delta.cmd'
+  $DustCmd = Join-Path $BinDir 'dust.cmd'
+  $EzaCmd = Join-Path $BinDir 'eza.cmd'
+  $FdCmd = Join-Path $BinDir 'fd.cmd'
+  $GenactCmd = Join-Path $BinDir 'genact.cmd'
+  $HyperfineCmd = Join-Path $BinDir 'hyperfine.cmd'
+  $ProcsCmd = Join-Path $BinDir 'procs.cmd'
+  $RipgrepCmd = Join-Path $BinDir 'rg.cmd'
+  $CodeCmd = Join-Path $BinDir 'code.cmd'
   $BashExe = Join-Path $CygwinDir 'bin/bash.exe'
 
   $PowerShellPathEntries = @(
-    $PythonDir,
-    (Join-Path $PythonDir 'Scripts'),
-    $NodeDir,
-    $UvDir,
-    $JqDir,
-    $PandocDir,
-    $PortableToolDirs.bat,
-    $PortableToolDirs.bottom,
-    $PortableToolDirs.delta,
-    $PortableToolDirs.dust,
-    $PortableToolDirs.eza,
-    $PortableToolDirs.fd,
-    $PortableToolDirs.genact,
-    $PortableToolDirs.hyperfine,
-    $PortableToolDirs.procs,
-    $PortableToolDirs.ripgrep,
-    (Join-Path $VSCodeDir 'bin')
+    $BinDir
   ) | Where-Object { Test-Path -LiteralPath $_ }
 
   $CygwinPathEntries = @(
@@ -1041,24 +1091,27 @@ try {
   Invoke-Checked -FilePath $PipCmd -Arguments @('install', '--no-cache-dir', 'python-docx', 'pypdf', 'Pillow') -LogOnly
   Write-Log "npm packages installing..." 'STEP' -LogOnly
   Invoke-Checked -FilePath $NpmCmd -Arguments @('install', '-g', 'npm', 'cowsay') -LogOnly
+  Write-CmdShim -Name 'cowsay.cmd' -TargetRelativePath '.local/opt/nodejs/cowsay.cmd'
+  $CowsayCmd = Join-Path $BinDir 'cowsay.cmd'
 
-  Test-CommandFile 'python' $PythonExe @('--version')
-  Test-CommandFile 'pip' $PipCmd @('--version')
-  Test-CommandFile 'node' $NodeExe @('--version')
-  Test-CommandFile 'npm' $NpmCmd @('--version')
-  Test-CommandFile 'uv' $UvExe @('--version')
-  Test-CommandFile 'jq' $JqExe @('--version')
-  Test-CommandFile 'pandoc' $PandocExe @('--version')
-  Test-CommandFile 'bat' $BatExe @('--version')
-  Test-CommandFile 'bottom' $BottomExe @('--version')
-  Test-CommandFile 'delta' $DeltaExe @('--version')
-  Test-CommandFile 'dust' $DustExe @('--version')
-  Test-CommandFile 'eza' $EzaExe @('--version')
-  Test-CommandFile 'fd' $FdExe @('--version')
-  Test-CommandFile 'genact' $GenactExe @('--version')
-  Test-CommandFile 'hyperfine' $HyperfineExe @('--version')
-  Test-CommandFile 'procs' $ProcsExe @('--version')
-  Test-CommandFile 'ripgrep' $RipgrepExe @('--version')
+  Test-CommandFile 'python' $PythonCmd @('--version')
+  Test-CommandFile 'pip' $PipCmdShim @('--version')
+  Test-CommandFile 'node' $NodeCmd @('--version')
+  Test-CommandFile 'npm' $NpmCmdShim @('--version')
+  Test-CommandFile 'uv' $UvCmd @('--version')
+  Test-CommandFile 'jq' $JqCmd @('--version')
+  Test-CommandFile 'pandoc' $PandocCmd @('--version')
+  Test-CommandFile 'bat' $BatCmd @('--version')
+  Test-CommandFile 'bottom' $BottomCmd @('--version')
+  Test-CommandFile 'delta' $DeltaCmd @('--version')
+  Test-CommandFile 'dust' $DustCmd @('--version')
+  Test-CommandFile 'eza' $EzaCmd @('--version')
+  Test-CommandFile 'fd' $FdCmd @('--version')
+  Test-CommandFile 'genact' $GenactCmd @('--version')
+  Test-CommandFile 'hyperfine' $HyperfineCmd @('--version')
+  Test-CommandFile 'procs' $ProcsCmd @('--version')
+  Test-CommandFile 'ripgrep' $RipgrepCmd @('--version')
+  Test-CommandFile 'cowsay' $CowsayCmd @('--version')
   Test-CommandFile 'code' $CodeCmd @('--version')
   Test-CommandFile 'cygwin bash' $BashExe @('--version')
 
