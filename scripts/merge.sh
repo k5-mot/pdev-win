@@ -82,7 +82,7 @@ fi
 
 (
   cd "$docker_dir"
-  mapfile -d '' archive_files < <(find . -type f ! -name '*.part*' -print0 | sort -z)
+  mapfile -d '' archive_files < <(find . -type f ! -name '*.part*' ! -path './manifest.json' -print0 | sort -z)
   if [[ "${#archive_files[@]}" -eq 0 ]]; then
     echo "ERROR: docker-dir has no files to archive." >&2
     exit 1
@@ -95,11 +95,11 @@ if [[ ! -f "$output_tar" ]]; then
   exit 1
 fi
 
-if command -v podman >/dev/null 2>&1; then
+if command -v docker >/dev/null 2>&1 || command -v podman >/dev/null 2>&1; then
   :
 else
-  echo "WARN: podman was not found in PATH; load was not tested." >&2
+  echo "WARN: docker/podman was not found in PATH; load was not tested." >&2
 fi
 
 echo "Created: $output_tar"
-echo "Load with: podman load -i $output_tar"
+echo "Load with: docker load -i $output_tar"

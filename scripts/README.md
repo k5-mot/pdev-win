@@ -1,6 +1,6 @@
 # 🐳 Image Download & Merge Scripts
 
-`scripts` 配下には、Docker/OCI registry から image を分割ダウンロードし、別環境で `podman load` できる tar に復元するための補助スクリプトを置きます。
+`scripts` 配下には、Docker/OCI registry から image を分割ダウンロードし、別環境で `docker load` または `podman load` できる tar に復元するための補助スクリプトを置きます。
 
 ## 🧰 Scripts
 
@@ -11,7 +11,7 @@
   - `state.json` と `download-manifest.json` で進捗と出力情報を管理する。
 - `merge.sh`
   - 分割保存された blob を復元する。
-  - `docker-dir` 形式の内容から `podman load -i` で読み込める tar を作成する。
+  - `docker-dir` 形式の内容から `docker load -i` / `podman load -i` で読み込める tar を作成する。
 
 ## 🚚 Example
 

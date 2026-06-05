@@ -306,11 +306,19 @@ function Get-HeaderValue {
     if ($headers -is [System.Collections.IDictionary]) {
         $value = $headers[$Name]
     }
+    elseif ($headers -is [System.Collections.Specialized.NameValueCollection]) {
+        $value = $headers[$Name]
+    }
     elseif ($null -ne $headers) {
-        foreach ($header in $headers) {
-            if ([string]$header.Key -eq $Name) {
-                $value = $header.Value
-                break
+        try {
+            $value = $headers[$Name]
+        }
+        catch {
+            foreach ($header in $headers) {
+                if ($null -ne $header.PSObject.Properties['Key'] -and [string]$header.Key -eq $Name) {
+                    $value = $header.Value
+                    break
+                }
             }
         }
     }
@@ -1138,23 +1146,32 @@ function Invoke-Main {
     }
     Write-Utf8NoBomFile -Path (Join-Path -Path $dockerDir -ChildPath "oci-layout") -Text ($ociLayout | ConvertTo-Json -Depth 5)
 
+    $indexManifest = [ordered]@{
+        mediaType = $manifestMediaType
+        digest = "sha256:$manifestDigestHex"
+        size = [Int64]$manifestBytes.Length
+        annotations = [ordered]@{
+            "org.opencontainers.image.ref.name" = $image.RepoTag
+        }
+    }
     $index = [ordered]@{
         schemaVersion = 2
-        manifests = @(
-            [ordered]@{
-                mediaType = $manifestMediaType
-                digest = "sha256:$manifestDigestHex"
-                size = [Int64]$manifestBytes.Length
-                annotations = [ordered]@{
-                    "org.opencontainers.image.ref.name" = $image.RepoTag
-                }
-            }
-        )
+        manifests = @($indexManifest)
     }
     Write-Utf8NoBomFile -Path (Join-Path -Path $dockerDir -ChildPath "index.json") -Text ($index | ConvertTo-Json -Depth 10)
 
     # 仕様上の見通し用に manifest.json も docker-dir 直下へ置く。
     # podman load が参照する本体は blobs/sha256/<manifest digest> と index.json。
+    $manifestSummaryLayers = @()
+    foreach ($layerEntry in $layerEntries) {
+        $manifestSummaryLayers += [ordered]@{
+            digest = $layerEntry.Digest
+            mediaType = $layerEntry.MediaType
+            size = $layerEntry.Size
+            files = @($layerEntry.Files)
+        }
+    }
+
     $manifestSummary = [ordered]@{
         schemaVersion = 2
         mediaType = $manifestMediaType
@@ -1163,14 +1180,7 @@ function Invoke-Main {
             digest = $configDigest
             files = @($configBlobFiles)
         }
-        layers = @($layerEntries | ForEach-Object {
-            [ordered]@{
-                digest = $_.Digest
-                mediaType = $_.MediaType
-                size = $_.Size
-                files = @($_.Files)
-            }
-        })
+        layers = $manifestSummaryLayers
     }
     Write-Utf8NoBomFile -Path (Join-Path -Path $dockerDir -ChildPath "manifest.json") -Text ($manifestSummary | ConvertTo-Json -Depth 10)
 
