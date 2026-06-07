@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-Downloads an image from a Docker/OCI registry and writes a split OCI layout directory.
+Docker/OCI registry から image を取得し、OCI layout ディレクトリとして保存します。
 
 .DESCRIPTION
-Uses Docker Registry HTTP API v2 directly without Docker Desktop, WSL2, administrator rights, regctl.exe, or crane.exe.
-The generated docker-dir can be packed by scripts/merge.sh into a docker/podman load compatible OCI archive tar.
+Docker Desktop、WSL2、管理者権限、regctl.exe、crane.exe に依存せず、Docker Registry HTTP API v2 を直接使用します。
+生成した docker-dir は、同時に生成される merge.sh で docker/podman load 互換の OCI archive tar にまとめられます。
 #>
 [CmdletBinding()]
 param(
@@ -692,127 +692,9 @@ function New-TarHeader {
     return ,$header
 }
 
-$script:PartSizeBytes = [Int64][Math]::Ceiling($maxGB * 1GB)
-$script:PartNumber = 0
-$script:PartBytes = [Int64]0
-$script:PartStream = $null
-$script:PartPaths = New-Object System.Collections.Generic.List[string]
+$script:MaxDockerDirBytes = [Int64][Math]::Ceiling($maxGB * 1GB)
 $script:TarFileBase = $null
 $script:OutputDir = $null
-
-<#
-.SYNOPSIS
-次の分割 Part ファイルを開きます。
-#>
-function Open-NextPart {
-    if ($null -ne $script:PartStream) {
-        $script:PartStream.Flush()
-        $script:PartStream.Dispose()
-    }
-
-    $script:PartNumber++
-    $script:PartBytes = 0
-    $partPath = Join-Path -Path $script:OutputDir -ChildPath ("{0}_Part{1}.tar" -f $script:TarFileBase, $script:PartNumber)
-    $script:PartPaths.Add($partPath) | Out-Null
-    $script:PartStream = [System.IO.File]::Open($partPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
-    Write-Log ("Part{0} start: {1}" -f $script:PartNumber, $partPath) "STEP"
-}
-
-<#
-.SYNOPSIS
-Docker archive の byte 列を Part サイズで分割しながら書き込みます。
-.PARAMETER Buffer
-書き込む byte 配列です。
-.PARAMETER Offset
-書き込み開始位置です。
-.PARAMETER Count
-書き込む byte 数です。
-#>
-function Write-ArchiveBytes {
-    param(
-        [Parameter(Mandatory = $true)][byte[]]$Buffer,
-        [Parameter(Mandatory = $true)][int]$Offset,
-        [Parameter(Mandatory = $true)][int]$Count
-    )
-
-    $written = 0
-    while ($written -lt $Count) {
-        if ($null -eq $script:PartStream -or $script:PartBytes -ge $script:PartSizeBytes) {
-            Open-NextPart
-        }
-
-        $remainingPart = $script:PartSizeBytes - $script:PartBytes
-        $toWrite = [int][Math]::Min([Int64]($Count - $written), $remainingPart)
-        $script:PartStream.Write($Buffer, $Offset + $written, $toWrite)
-        $script:PartBytes += $toWrite
-        $written += $toWrite
-    }
-}
-
-<#
-.SYNOPSIS
-ローカルファイルを tar エントリとして archive に書き込みます。
-.PARAMETER ArchivePath
-tar 内のパスです。
-.PARAMETER SourcePath
-書き込み元ファイルパスです。
-#>
-function Write-ArchiveFile {
-    param(
-        [Parameter(Mandatory = $true)][string]$ArchivePath,
-        [Parameter(Mandatory = $true)][string]$SourcePath
-    )
-
-    $file = Get-Item -LiteralPath $SourcePath
-    $header = New-TarHeader -Name $ArchivePath -Size $file.Length
-    Write-ArchiveBytes -Buffer $header -Offset 0 -Count $header.Length
-
-    $input = [System.IO.File]::OpenRead($SourcePath)
-    $buffer = New-Object byte[] 1048576
-    try {
-        while ($true) {
-            $read = $input.Read($buffer, 0, $buffer.Length)
-            if ($read -le 0) {
-                break
-            }
-            Write-ArchiveBytes -Buffer $buffer -Offset 0 -Count $read
-        }
-    }
-    finally {
-        $input.Dispose()
-    }
-
-    $padding = (512 - ($file.Length % 512)) % 512
-    if ($padding -gt 0) {
-        $zeros = New-Object byte[] ([int]$padding)
-        Write-ArchiveBytes -Buffer $zeros -Offset 0 -Count $zeros.Length
-    }
-}
-
-<#
-.SYNOPSIS
-文字列を一時ファイル経由で tar エントリとして archive に書き込みます。
-.PARAMETER ArchivePath
-tar 内のパスです。
-.PARAMETER Text
-書き込むテキストです。
-#>
-function Write-ArchiveTextFile {
-    param(
-        [Parameter(Mandatory = $true)][string]$ArchivePath,
-        [Parameter(Mandatory = $true)][string]$Text
-    )
-
-    $temp = [System.IO.Path]::GetTempFileName()
-    try {
-        $utf8 = New-Object System.Text.UTF8Encoding($false)
-        [System.IO.File]::WriteAllText($temp, $Text, $utf8)
-        Write-ArchiveFile -ArchivePath $ArchivePath -SourcePath $temp
-    }
-    finally {
-        Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
-    }
-}
 
 <#
 .SYNOPSIS
@@ -834,89 +716,208 @@ function Write-Utf8NoBomFile {
 
 <#
 .SYNOPSIS
-ファイルを指定サイズ以下の part ファイルへ分割します。
-.PARAMETER SourcePath
-分割元ファイルです。
-.PARAMETER DestinationPath
-分割しない場合の出力ファイル、または part 名の基準になるパスです。
-.PARAMETER PartSizeBytes
-1 part の最大 byte 数です。
-.OUTPUTS
-作成したファイル名の配列を返します。
+不要になった _work 配下の一時ファイルを削除します。
+.PARAMETER Path
+削除対象ファイルです。
 #>
-function Split-FileToParts {
-    param(
-        [Parameter(Mandatory = $true)][string]$SourcePath,
-        [Parameter(Mandatory = $true)][string]$DestinationPath,
-        [Parameter(Mandatory = $true)][Int64]$PartSizeBytes
-    )
+function Remove-WorkFile {
+    param([Parameter(Mandatory = $true)][string]$Path)
 
-    $source = Get-Item -LiteralPath $SourcePath
-    $created = New-Object System.Collections.Generic.List[string]
-    if ($source.Length -le $PartSizeBytes) {
-        Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
-        $created.Add((Split-Path -Leaf $DestinationPath)) | Out-Null
-        return @($created)
+    if ($KeepTemp) {
+        return
     }
-
-    $input = [System.IO.File]::OpenRead($SourcePath)
-    $buffer = New-Object byte[] 1048576
-    try {
-        $partNumber = 1
-        while ($input.Position -lt $input.Length) {
-            $partPath = "{0}.part{1:D4}" -f $DestinationPath, $partNumber
-            $output = [System.IO.File]::Open($partPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
-            try {
-                [Int64]$written = 0
-                while ($written -lt $PartSizeBytes -and $input.Position -lt $input.Length) {
-                    $toRead = [int][Math]::Min([Int64]$buffer.Length, $PartSizeBytes - $written)
-                    $read = $input.Read($buffer, 0, $toRead)
-                    if ($read -le 0) {
-                        break
-                    }
-                    $output.Write($buffer, 0, $read)
-                    $written += $read
-                }
-            }
-            finally {
-                $output.Dispose()
-            }
-
-            $created.Add((Split-Path -Leaf $partPath)) | Out-Null
-            $partNumber++
-        }
-    }
-    finally {
-        $input.Dispose()
-    }
-
-    return @($created)
+    Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
 }
 
 <#
 .SYNOPSIS
-OCI layout の blob ファイルを指定サイズ以下の part ファイルへ分割保存します。
+OCI archive を作成する merge.sh の内容を生成します。
+.OUTPUTS
+merge.sh のテキストを返します。
+#>
+function New-MergeScriptContent {
+    return @'
+#!/usr/bin/env bash
+set -euo pipefail
+
+state_file="state.json"
+legacy_manifest_file="download-manifest.json"
+docker_dir="docker-dir"
+
+color_ok=$'\033[32m'
+color_warn=$'\033[33m'
+color_error=$'\033[31m'
+color_step=$'\033[36m'
+color_reset=$'\033[0m'
+
+log() {
+  local level="$1"
+  local message="$2"
+  local color="$color_reset"
+  case "$level" in
+    OK) color="$color_ok" ;;
+    WARN) color="$color_warn" ;;
+    ERROR) color="$color_error" ;;
+    STEP) color="$color_step" ;;
+  esac
+  printf '%s[%s]%s %s\n' "$color" "$level" "$color_reset" "$message"
+}
+
+json_value() {
+  local file="$1"
+  local key="$2"
+  sed -n 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$file" | head -n 1
+}
+
+if [[ -f "$state_file" ]]; then
+  file_base="$(json_value "$state_file" "FileBase")"
+  output_tar="$(json_value "$state_file" "OutputTar")"
+  parsed_docker_dir="$(json_value "$state_file" "DockerDir")"
+  if [[ -n "$parsed_docker_dir" ]]; then
+    docker_dir="$parsed_docker_dir"
+  fi
+elif [[ -f "$legacy_manifest_file" ]]; then
+  file_base="$(json_value "$legacy_manifest_file" "FileBase")"
+  output_tar="$(json_value "$legacy_manifest_file" "OutputTar")"
+  parsed_docker_dir="$(json_value "$legacy_manifest_file" "DockerDir")"
+  if [[ -n "$parsed_docker_dir" ]]; then
+    docker_dir="$parsed_docker_dir"
+  fi
+else
+  if [[ ! -d "$docker_dir" ]]; then
+    log ERROR "state.json or docker-dir was not found."
+    exit 1
+  fi
+  file_base="$(basename "$PWD")"
+  output_tar="${file_base}.tar"
+fi
+
+if [[ -z "${file_base:-}" || -z "${output_tar:-}" ]]; then
+  log ERROR "Could not determine output tar name."
+  exit 1
+fi
+
+if [[ -e "$output_tar" ]]; then
+  log ERROR "Output already exists: $output_tar"
+  exit 1
+fi
+
+if [[ ! -d "$docker_dir" ]]; then
+  log ERROR "docker-dir was not found: $docker_dir"
+  exit 1
+fi
+
+blobs_dir="${docker_dir}/blobs/sha256"
+if [[ ! -d "$blobs_dir" ]]; then
+  log ERROR "OCI blobs directory was not found: $blobs_dir"
+  exit 1
+fi
+
+index_file="${docker_dir}/index.json"
+if [[ ! -f "${docker_dir}/oci-layout" || ! -f "$index_file" ]]; then
+  log ERROR "OCI layout files are missing in: $docker_dir"
+  exit 1
+fi
+
+log STEP "Creating OCI archive directly from: $docker_dir"
+(
+  cd "$docker_dir"
+  tar -cf "../$output_tar" oci-layout index.json blobs
+)
+
+if [[ ! -f "$output_tar" ]]; then
+  log ERROR "Failed to create output tar: $output_tar"
+  exit 1
+fi
+
+if command -v docker >/dev/null 2>&1 || command -v podman >/dev/null 2>&1; then
+  log OK "docker/podman command was found."
+else
+  log WARN "docker/podman was not found in PATH; load was not tested."
+fi
+
+log OK "Created: $output_tar"
+log OK "Load with: docker load -i $output_tar"
+'@
+}
+
+<#
+.SYNOPSIS
+ディレクトリ配下のファイルサイズ合計を取得します。
+.PARAMETER Path
+確認対象ディレクトリです。
+.OUTPUTS
+byte 単位の合計サイズを返します。
+#>
+function Get-DirectorySizeBytes {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+        return [Int64]0
+    }
+
+    [Int64]$total = 0
+    Get-ChildItem -LiteralPath $Path -Recurse -Force -File | ForEach-Object {
+        $total += [Int64]$_.Length
+    }
+    return $total
+}
+
+<#
+.SYNOPSIS
+docker-dir のサイズ上限を超えそうな場合に退避を促します。
+.PARAMETER DockerDir
+確認対象の docker-dir です。
+.PARAMETER IncomingSizeBytes
+これから追加する blob の byte 数です。
+.PARAMETER ItemName
+ログへ表示する対象名です。
+#>
+function Confirm-DockerDirCapacity {
+    param(
+        [Parameter(Mandatory = $true)][string]$DockerDir,
+        [Parameter(Mandatory = $true)][Int64]$IncomingSizeBytes,
+        [Parameter(Mandatory = $true)][string]$ItemName
+    )
+
+    if ($IncomingSizeBytes -gt $script:MaxDockerDirBytes) {
+        Write-Log ("{0} is larger than the configured limit. item={1:N2} GB limit={2:N2} GB" -f $ItemName, ($IncomingSizeBytes / 1GB), ($script:MaxDockerDirBytes / 1GB)) "WARN"
+        Write-Log "Increase -maxGB for this image, or use an output location that can accept this single blob." "STEP"
+        return $false
+    }
+
+    $currentSize = Get-DirectorySizeBytes -Path $DockerDir
+    if (($currentSize + $IncomingSizeBytes) -le $script:MaxDockerDirBytes) {
+        return $true
+    }
+
+    Write-Log ("docker-dir will exceed the configured limit. current={0:N2} GB incoming={1:N2} GB limit={2:N2} GB" -f ($currentSize / 1GB), ($IncomingSizeBytes / 1GB), ($script:MaxDockerDirBytes / 1GB)) "WARN"
+    Write-Log "Copy this image directory to the file server, delete local docker-dir/blobs/sha256 blobs, then run the same command again." "STEP"
+    return $false
+}
+
+<#
+.SYNOPSIS
+OCI layout の blob ファイルを分割せずに保存します。
 .PARAMETER SourcePath
 保存元ファイルです。
 .PARAMETER BlobsDirectory
 docker-dir/blobs/sha256 ディレクトリです。
 .PARAMETER DigestHex
 sha256 digest の hex 文字列です。
-.PARAMETER PartSizeBytes
-1 part の最大 byte 数です。
 .OUTPUTS
-作成した blob ファイル名または part ファイル名の配列を返します。
+作成した blob ファイル名を返します。
 #>
 function Save-OciBlobFile {
     param(
         [Parameter(Mandatory = $true)][string]$SourcePath,
         [Parameter(Mandatory = $true)][string]$BlobsDirectory,
-        [Parameter(Mandatory = $true)][string]$DigestHex,
-        [Parameter(Mandatory = $true)][Int64]$PartSizeBytes
+        [Parameter(Mandatory = $true)][string]$DigestHex
     )
 
     $destinationPath = Join-Path -Path $BlobsDirectory -ChildPath $DigestHex
-    return @(Split-FileToParts -SourcePath $SourcePath -DestinationPath $destinationPath -PartSizeBytes $PartSizeBytes)
+    Copy-Item -LiteralPath $SourcePath -Destination $destinationPath -Force
+    return @((Split-Path -Leaf $destinationPath))
 }
 
 <#
@@ -943,10 +944,15 @@ function New-DownloadState {
         Image = $Image.RepoTag
         Platform = $Platform
         FileBase = $FileBase
+        OutputTar = "$FileBase.tar"
+        DockerDir = "docker-dir"
         Format = "oci-layout"
+        MaxDockerDirBytes = $script:MaxDockerDirBytes
         ManifestDigest = $null
+        Manifest = $null
         ConfigDigest = $null
         ConfigDownloaded = $false
+        Config = $null
         Layers = @()
         ArchiveCompleted = $false
         CreatedAt = [DateTime]::UtcNow.ToString("o")
@@ -974,6 +980,58 @@ function Save-DownloadState {
 
 <#
 .SYNOPSIS
+既存の state.json を読み込みます。
+.PARAMETER Path
+state.json のパスです。
+.OUTPUTS
+読み込んだ state オブジェクト、または null を返します。
+#>
+function Read-DownloadState {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $null
+    }
+
+    return (Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json)
+}
+
+<#
+.SYNOPSIS
+指定 digest が state 上で完了済みかどうかを判定します。
+.PARAMETER State
+確認対象の state オブジェクトです。
+.PARAMETER Digest
+sha256: 付き digest です。
+.OUTPUTS
+完了済みなら true を返します。
+#>
+function Test-StateDigestCompleted {
+    param(
+        [AllowNull()]$State,
+        [Parameter(Mandatory = $true)][string]$Digest
+    )
+
+    if ($null -eq $State) {
+        return $false
+    }
+    if ($null -ne $State.Manifest -and $State.Manifest.Digest -eq $Digest) {
+        return $true
+    }
+    if ($null -ne $State.Config -and $State.Config.Digest -eq $Digest) {
+        return $true
+    }
+    foreach ($layer in @($State.Layers)) {
+        if ($layer.Digest -eq $Digest -and $layer.Status -eq "completed") {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+<#
+.SYNOPSIS
 state.json の Layers 配列に layer の進捗を追加または更新します。
 .PARAMETER State
 更新対象の state オブジェクトです。
@@ -985,6 +1043,12 @@ registry layer digest です。
 未圧縮 layer tar の SHA256 digest です。
 .PARAMETER Status
 layer の状態です。
+.PARAMETER MediaType
+layer の media type です。
+.PARAMETER Size
+layer blob の byte 数です。
+.PARAMETER Files
+保存した blob ファイル名です。
 #>
 function Set-LayerState {
     param(
@@ -992,7 +1056,10 @@ function Set-LayerState {
         [Parameter(Mandatory = $true)][int]$Index,
         [Parameter(Mandatory = $true)][string]$Digest,
         [AllowNull()][string]$DiffId,
-        [Parameter(Mandatory = $true)][string]$Status
+        [Parameter(Mandatory = $true)][string]$Status,
+        [AllowNull()][string]$MediaType,
+        [AllowNull()][Nullable[Int64]]$Size,
+        [string[]]$Files = @()
     )
 
     $layers = @($State.Layers)
@@ -1003,6 +1070,9 @@ function Set-LayerState {
             Digest = $Digest
             DiffId = $DiffId
             Status = $Status
+            MediaType = $MediaType
+            Size = $Size
+            Files = @($Files)
             UpdatedAt = [DateTime]::UtcNow.ToString("o")
         }
     }
@@ -1010,6 +1080,9 @@ function Set-LayerState {
         $existing[0].Digest = $Digest
         $existing[0].DiffId = $DiffId
         $existing[0].Status = $Status
+        $existing[0].MediaType = $MediaType
+        $existing[0].Size = $Size
+        $existing[0].Files = @($Files)
         $existing[0].UpdatedAt = [DateTime]::UtcNow.ToString("o")
     }
 
@@ -1018,30 +1091,18 @@ function Set-LayerState {
 
 <#
 .SYNOPSIS
-tar archive の終端ブロックを書き込み、現在の Part を閉じます。
-#>
-function Close-Archive {
-    $zeros = New-Object byte[] 1024
-    Write-ArchiveBytes -Buffer $zeros -Offset 0 -Count $zeros.Length
-    if ($null -ne $script:PartStream) {
-        $script:PartStream.Flush()
-        $script:PartStream.Dispose()
-        $script:PartStream = $null
-    }
-}
-
-<#
-.SYNOPSIS
-イメージ取得、state 更新、OCI layout 分割出力までの主処理を実行します。
+イメージ取得、state 更新、OCI layout 出力までの主処理を実行します。
 #>
 function Invoke-Main {
     $image = Split-ImageReference -Reference $imageName
     $resolvedOutputRoot = (New-Item -ItemType Directory -Path $OutputRoot -Force).FullName
     $outputDir = Join-Path -Path $resolvedOutputRoot -ChildPath $image.FileBase
-    if ((Test-Path -LiteralPath $outputDir) -and $Force) {
+    $statePath = Join-Path -Path $outputDir -ChildPath "state.json"
+    $resumeState = Read-DownloadState -Path $statePath
+    if ((Test-Path -LiteralPath $outputDir) -and $Force -and $null -eq $resumeState) {
         Remove-Item -LiteralPath $outputDir -Recurse -Force
     }
-    elseif (Test-Path -LiteralPath $outputDir) {
+    elseif ((Test-Path -LiteralPath $outputDir) -and $null -eq $resumeState) {
         $existing = @(Get-ChildItem -LiteralPath $outputDir -Force -ErrorAction SilentlyContinue)
         if ($existing.Count -gt 0) {
             throw "Existing output files were found. Remove them or pass -Force: $outputDir"
@@ -1049,14 +1110,23 @@ function Invoke-Main {
     }
 
     $created = New-Item -ItemType Directory -Path $outputDir -Force
+    $statePath = Join-Path -Path $created.FullName -ChildPath "state.json"
+    $resumeState = Read-DownloadState -Path $statePath
     $tempDir = Join-Path -Path $created.FullName -ChildPath "_work"
     New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
     $dockerDir = Join-Path -Path $created.FullName -ChildPath "docker-dir"
     New-Item -ItemType Directory -Path $dockerDir -Force | Out-Null
     $blobsDir = Join-Path -Path $dockerDir -ChildPath "blobs\sha256"
     New-Item -ItemType Directory -Path $blobsDir -Force | Out-Null
-    $statePath = Join-Path -Path $dockerDir -ChildPath "state.json"
-    $state = New-DownloadState -Image $image -Platform $Platform -FileBase $image.FileBase
+    $mergeDest = Join-Path -Path $created.FullName -ChildPath "merge.sh"
+    Write-Utf8NoBomFile -Path $mergeDest -Text ((New-MergeScriptContent) -replace "`r`n", "`n")
+    $state = if ($null -ne $resumeState) {
+        Write-Log "Resuming from state.json" "STEP"
+        $resumeState
+    }
+    else {
+        New-DownloadState -Image $image -Platform $Platform -FileBase $image.FileBase
+    }
     Save-DownloadState -State $state -Path $statePath
 
     $script:OutputDir = $created.FullName
@@ -1090,55 +1160,89 @@ function Invoke-Main {
 
     $manifestBlobPath = Join-Path -Path $tempDir -ChildPath ($manifestDigestHex + ".manifest.json")
     Write-Utf8NoBomFile -Path $manifestBlobPath -Text $manifestResult.Content
-    $manifestBlobFiles = Save-OciBlobFile -SourcePath $manifestBlobPath -BlobsDirectory $blobsDir -DigestHex $manifestDigestHex -PartSizeBytes $script:PartSizeBytes
-    Copy-Item -LiteralPath $manifestBlobPath -Destination (Join-Path -Path $dockerDir -ChildPath "manifest.json") -Force
-    $state.ManifestDigest = "sha256:$manifestDigestHex"
-    Save-DownloadState -State $state -Path $statePath
+    if (Test-StateDigestCompleted -State $state -Digest "sha256:$manifestDigestHex") {
+        Write-Log "Skipping completed manifest blob: sha256:$manifestDigestHex" "OK"
+        Remove-WorkFile -Path $manifestBlobPath
+    }
+    else {
+        if (-not (Confirm-DockerDirCapacity -DockerDir $dockerDir -IncomingSizeBytes ([Int64]$manifestBytes.Length) -ItemName "manifest blob")) {
+            Save-DownloadState -State $state -Path $statePath
+            Remove-WorkFile -Path $manifestBlobPath
+            return
+        }
+        $manifestBlobFiles = Save-OciBlobFile -SourcePath $manifestBlobPath -BlobsDirectory $blobsDir -DigestHex $manifestDigestHex
+        Remove-WorkFile -Path $manifestBlobPath
+        $state.ManifestDigest = "sha256:$manifestDigestHex"
+        $state.Manifest = [pscustomobject]@{
+            Digest = "sha256:$manifestDigestHex"
+            Files = @($manifestBlobFiles)
+        }
+        Save-DownloadState -State $state -Path $statePath
+    }
 
     $configDigest = [string]$manifest.config.digest
     $configHex = $configDigest.Replace("sha256:", "")
     $configPath = Join-Path -Path $tempDir -ChildPath ($configHex + ".json")
     $configUri = "https://$($image.RegistryHost)/v2/$($image.Repository)/blobs/$configDigest"
-    Write-Log "Downloading config blob." "STEP"
-    Invoke-RegistryWebRequest -Uri $configUri -Token $token -Accept $null -OutFile $configPath | Out-Null
-    $actualConfigHash = Get-FileSha256 -Path $configPath
-    if ($actualConfigHash -ne $configHex) {
-        throw "config digest mismatch: expected=$configHex actual=$actualConfigHash"
+    $configSize = [Int64](Get-JsonProperty -Object $manifest.config -Name "size")
+    if (Test-StateDigestCompleted -State $state -Digest $configDigest) {
+        Write-Log "Skipping completed config blob: $configDigest" "OK"
     }
-    $configBlobFiles = Save-OciBlobFile -SourcePath $configPath -BlobsDirectory $blobsDir -DigestHex $configHex -PartSizeBytes $script:PartSizeBytes
-    $state.ConfigDigest = $configDigest
-    $state.ConfigDownloaded = $true
-    Save-DownloadState -State $state -Path $statePath
+    else {
+        if (-not (Confirm-DockerDirCapacity -DockerDir $dockerDir -IncomingSizeBytes $configSize -ItemName "config blob")) {
+            Save-DownloadState -State $state -Path $statePath
+            return
+        }
+        Write-Log "Downloading config blob." "STEP"
+        Invoke-RegistryWebRequest -Uri $configUri -Token $token -Accept $null -OutFile $configPath | Out-Null
+        $actualConfigHash = Get-FileSha256 -Path $configPath
+        if ($actualConfigHash -ne $configHex) {
+            throw "config digest mismatch: expected=$configHex actual=$actualConfigHash"
+        }
+        $configBlobFiles = Save-OciBlobFile -SourcePath $configPath -BlobsDirectory $blobsDir -DigestHex $configHex
+        Remove-WorkFile -Path $configPath
+        $state.ConfigDigest = $configDigest
+        $state.ConfigDownloaded = $true
+        $state.Config = [pscustomobject]@{
+            Digest = $configDigest
+            Files = @($configBlobFiles)
+        }
+        Save-DownloadState -State $state -Path $statePath
+    }
 
-    $layerEntries = New-Object System.Collections.Generic.List[object]
     $layerIndex = 0
     foreach ($layer in @($manifest.layers)) {
         $layerIndex++
         $digest = [string]$layer.digest
         $digestHex = $digest.Replace("sha256:", "")
         $mediaType = [string](Get-JsonProperty -Object $layer -Name "mediaType")
+        $layerSize = [Int64](Get-JsonProperty -Object $layer -Name "size")
         $blobPath = Join-Path -Path $tempDir -ChildPath ("layer-{0}-{1}.blob" -f $layerIndex, $digestHex)
         $blobUri = "https://$($image.RegistryHost)/v2/$($image.Repository)/blobs/$digest"
 
-        Set-LayerState -State $state -Index $layerIndex -Digest $digest -DiffId $null -Status "downloading"
+        if (Test-StateDigestCompleted -State $state -Digest $digest) {
+            Write-Log ("Skipping completed layer {0}/{1}: {2}" -f $layerIndex, @($manifest.layers).Count, $digest) "OK"
+            continue
+        }
+
+        Set-LayerState -State $state -Index $layerIndex -Digest $digest -DiffId $null -Status "downloading" -MediaType $mediaType -Size $layerSize
         Save-DownloadState -State $state -Path $statePath
+        if (-not (Confirm-DockerDirCapacity -DockerDir $dockerDir -IncomingSizeBytes $layerSize -ItemName ("layer {0}" -f $layerIndex))) {
+            Save-DownloadState -State $state -Path $statePath
+            return
+        }
         Write-Log ("Downloading layer {0}/{1}: {2}" -f $layerIndex, @($manifest.layers).Count, $digest) "STEP"
         Invoke-RegistryWebRequest -Uri $blobUri -Token $token -Accept $null -OutFile $blobPath | Out-Null
         $actualLayerHash = Get-FileSha256 -Path $blobPath
         if ($actualLayerHash -ne $digestHex) {
             throw "layer digest mismatch: expected=$digestHex actual=$actualLayerHash"
         }
-        $layerBlobFiles = Save-OciBlobFile -SourcePath $blobPath -BlobsDirectory $blobsDir -DigestHex $digestHex -PartSizeBytes $script:PartSizeBytes
-        Set-LayerState -State $state -Index $layerIndex -Digest $digest -DiffId $null -Status "completed"
+        $downloadedLayerSize = [Int64](Get-Item -LiteralPath $blobPath).Length
+        $layerBlobFiles = Save-OciBlobFile -SourcePath $blobPath -BlobsDirectory $blobsDir -DigestHex $digestHex
+        Remove-WorkFile -Path $blobPath
+        Set-LayerState -State $state -Index $layerIndex -Digest $digest -DiffId $null -Status "completed" -MediaType $mediaType -Size $downloadedLayerSize -Files @($layerBlobFiles)
         Save-DownloadState -State $state -Path $statePath
 
-        $layerEntries.Add([pscustomobject]@{
-            Digest = $digest
-            DigestHex = $digestHex
-            MediaType = $mediaType
-            Size = [Int64](Get-Item -LiteralPath $blobPath).Length
-            Files = @($layerBlobFiles)
-        }) | Out-Null
     }
 
     $ociLayout = [ordered]@{
@@ -1160,72 +1264,16 @@ function Invoke-Main {
     }
     Write-Utf8NoBomFile -Path (Join-Path -Path $dockerDir -ChildPath "index.json") -Text ($index | ConvertTo-Json -Depth 10)
 
-    # 仕様上の見通し用に manifest.json も docker-dir 直下へ置く。
-    # podman load が参照する本体は blobs/sha256/<manifest digest> と index.json。
-    $manifestSummaryLayers = @()
-    foreach ($layerEntry in $layerEntries) {
-        $manifestSummaryLayers += [ordered]@{
-            digest = $layerEntry.Digest
-            mediaType = $layerEntry.MediaType
-            size = $layerEntry.Size
-            files = @($layerEntry.Files)
-        }
-    }
-
-    $manifestSummary = [ordered]@{
-        schemaVersion = 2
-        mediaType = $manifestMediaType
-        digest = "sha256:$manifestDigestHex"
-        config = [ordered]@{
-            digest = $configDigest
-            files = @($configBlobFiles)
-        }
-        layers = $manifestSummaryLayers
-    }
-    Write-Utf8NoBomFile -Path (Join-Path -Path $dockerDir -ChildPath "manifest.json") -Text ($manifestSummary | ConvertTo-Json -Depth 10)
-
-    Write-Log ("OCI docker-dir created with blob part size {0:N2} GB." -f $maxGB) "OK"
+    Write-Log ("OCI docker-dir created. Keep each transferred docker-dir copy within {0:N2} GB." -f $maxGB) "OK"
     $state.ArchiveCompleted = $true
     Save-DownloadState -State $state -Path $statePath
-
-    $metadata = [pscustomobject]@{
-        Image = $image.RepoTag
-        Platform = $Platform
-        Format = "oci-layout"
-        FileBase = $image.FileBase
-        OutputTar = "$($image.FileBase).tar"
-        DockerDir = "docker-dir"
-        PartSizeBytes = $script:PartSizeBytes
-        Manifest = [pscustomobject]@{
-            Digest = "sha256:$manifestDigestHex"
-            Files = @($manifestBlobFiles)
-        }
-        Config = [pscustomobject]@{
-            Digest = $configDigest
-            Files = @($configBlobFiles)
-        }
-        Layers = @($layerEntries | ForEach-Object {
-            [pscustomobject]@{
-                Digest = $_.Digest
-                Files = @($_.Files)
-            }
-        })
-        CreatedAt = [DateTime]::UtcNow.ToString("o")
-    }
-    Write-Utf8NoBomFile -Path (Join-Path -Path $created.FullName -ChildPath "download-manifest.json") -Text ($metadata | ConvertTo-Json -Depth 5)
-
-    $mergeSource = Join-Path -Path $ScriptDirectory -ChildPath "merge.sh"
-    $mergeDest = Join-Path -Path $created.FullName -ChildPath "merge.sh"
-    if (Test-Path -LiteralPath $mergeSource -PathType Leaf) {
-        Copy-Item -LiteralPath $mergeSource -Destination $mergeDest -Force
-    }
 
     if (-not $KeepTemp) {
         Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     Write-Log ("Complete: {0}" -f $created.FullName) "OK"
-    Write-Log ("Run 'bash merge.sh' in the copied directory to restore split blobs and create {0}.tar." -f $image.FileBase) "OK"
+    Write-Log ("Run 'bash merge.sh' in the copied directory to create {0}.tar." -f $image.FileBase) "OK"
 }
 
 try {
