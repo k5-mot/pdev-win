@@ -1,0 +1,6 @@
+docker-dir/
+blobs/sha256
+index.json
+oci-layout
+merge.sh
+state.json
