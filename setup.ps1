@@ -511,6 +511,58 @@ function Get-GitHubReleaseAsset {
 
 <#
 .SYNOPSIS
+.local/pkg にある GitHub Releases asset のキャッシュを取得します。
+.PARAMETER Name
+ツール名です。
+.PARAMETER AssetPattern
+対象 asset 名を判定する正規表現です。
+#>
+function Get-CachedGitHubReleaseAsset {
+    param(
+    [Parameter(Mandatory)][string]$Name,
+    [Parameter(Mandatory)][string]$AssetPattern
+  )
+
+  if ($script:InstallForce -or (-not (Test-Path -LiteralPath $PkgDir))) {
+    return $null
+  }
+
+  $files = @(Get-ChildItem -LiteralPath $PkgDir -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc -Descending)
+  foreach ($file in $files) {
+    $assetName = $null
+    $tag = $null
+
+    if ($file.Name -match $AssetPattern) {
+      $assetName = $file.Name
+    } elseif ($file.Name.StartsWith("$Name-", [StringComparison]::OrdinalIgnoreCase)) {
+      $suffix = $file.Name.Substring($Name.Length + 1)
+      for ($i = 0; $i -lt $suffix.Length; $i++) {
+        if ($suffix[$i] -ne '-') { continue }
+        if ($i -ge ($suffix.Length - 1)) { continue }
+
+        $candidate = $suffix.Substring($i + 1)
+        if ($candidate -match $AssetPattern) {
+          $tag = $suffix.Substring(0, $i)
+          $assetName = $candidate
+          break
+        }
+      }
+    }
+
+    if ($null -ne $assetName) {
+      return [pscustomobject]@{
+        Tag = $tag
+        Name = $assetName
+        Path = $file.FullName
+      }
+    }
+  }
+
+  return $null
+}
+
+<#
+.SYNOPSIS
 GitHub Releases の portable asset をダウンロードして配置します。
 .PARAMETER Name
 ツール名です。
@@ -533,15 +585,21 @@ function Install-GitHubPortableTool {
   )
 
   Write-Log "Installing $Name from GitHub Releases to: $Destination" 'STEP'
-  $asset = Get-GitHubReleaseAsset -Repo $Repo -AssetPattern $AssetPattern
-  if ($null -eq $asset) {
-    Write-Log "$Name was skipped: no portable Windows x64 release asset matched '$AssetPattern' in $Repo." 'WARN'
-    return $false
-  }
+  $asset = Get-CachedGitHubReleaseAsset -Name $Name -AssetPattern $AssetPattern
+  if ($null -ne $asset) {
+    Write-Log "Using cached release asset for ${Name}: $($asset.Name)" 'OK'
+    $download = $asset.Path
+  } else {
+    $asset = Get-GitHubReleaseAsset -Repo $Repo -AssetPattern $AssetPattern
+    if ($null -eq $asset) {
+      Write-Log "$Name was skipped: no portable Windows x64 release asset matched '$AssetPattern' in $Repo." 'WARN'
+      return $false
+    }
 
-  Write-Log "$Name release asset: $($asset.Tag) / $($asset.Name)" 'INFO'
-  $cacheName = "$Name-$($asset.Tag)-$($asset.Name)"
-  $download = Download-FileCached $asset.Url $cacheName
+    Write-Log "$Name release asset: $($asset.Tag) / $($asset.Name)" 'INFO'
+    $cacheName = "$Name-$($asset.Tag)-$($asset.Name)"
+    $download = Download-FileCached $asset.Url $cacheName
+  }
   if ($asset.Name.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase)) {
     New-Directory $Destination
     Copy-Item -LiteralPath $download -Destination (Join-Path $Destination $ExeName) -Force
