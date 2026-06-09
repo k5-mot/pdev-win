@@ -15,7 +15,7 @@ param(
 
   [string]$VSCodeVersion = 'stable',
 
-  [string]$CygwinPackages = 'bash,coreutils,curl,git,openssh,vim,nano,make,gcc-core,gcc-g++,tmux',
+  [string]$CygwinPackages = 'bash,coreutils,curl,git,openssh,vim,nano,make,gcc-core,gcc-g++,tmux,jq',
 
   [switch]$Force
 )
