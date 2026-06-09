@@ -31,20 +31,29 @@ Python には `setuptools`、`wheel`、`python-docx`、`pypdf`、`Pillow` も追
 PowerShell を開き、以下を実行します。
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -Root "$env:USERPROFILE\Desktop\pdev"
+Invoke-RestMethod https://raw.githubusercontent.com/k5-mot/pdev-win/refs/heads/main/setup.ps1 | Invoke-Expression
 ```
 
-既定の `Desktop` がリダイレクトされている環境では、必要に応じて `[Environment]::GetFolderPath('Desktop')` で取得したパスを `-Root` に指定してください。
+または
+
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/k5-mot/pdev-win/refs/heads/main/setup.ps1))) -Root "$env:USERPROFILE\Desktop\pdev"
+```
+
+`setup.ps1` は既定で `[Environment]::GetFolderPath('Desktop')` から解決した `Desktop` 配下の `pdev` を Root にします。
 
 ## 🪜 Step-by-Step
 
 スクリプトを確認してから実行したい場合:
 
 ```powershell
-# 1. リポジトリの作業ディレクトリへ移動する。
+# 1. リポジトリをクローンする.
+git clone https://github.com/k5-mot/pdev-win $env:USERPROFILE\Desktop\pdev-win
+
+# 2. リポジトリの作業ディレクトリへ移動する。
 cd "$env:USERPROFILE\Desktop\pdev-win"
 
-# 2. Desktop 配下へ portable environment を作成する。
+# 3. Desktop 配下へ portable environment を作成する。
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -Root "$env:USERPROFILE\Desktop\pdev"
 ```
 
