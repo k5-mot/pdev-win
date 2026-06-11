@@ -1,0 +1,6 @@
+interface:
+  display_name: "Translate JA"
+  short_description: "Translate English PDFs into Japanese Markdown"
+  default_prompt: "Use $translate-ja to translate an English PDF into Japanese Markdown step by step."
+policy:
+  allow_implicit_invocation: true
