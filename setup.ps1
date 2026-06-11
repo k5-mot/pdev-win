@@ -816,8 +816,9 @@ function Write-VSCodeSettings {
     }
     'workbench.colorTheme' = 'Visual Studio Dark'
     'window.commandCenter' = $false
-    'chat.titleBar.signIn.enabled' = $false
     'chat.disableAIFeatures' = $true
+    'chat.titleBar.signIn.enabled' = $false
+    'chat.titleBar.openInAgentsWindow.enabled': $false
   }
   $json = $settings | ConvertTo-Json -Depth 20
   Set-Content -LiteralPath $settingsPath -Value $json -Encoding UTF8
