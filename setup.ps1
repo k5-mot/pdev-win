@@ -1138,8 +1138,7 @@ try {
     $PythonDir,
     (Join-Path $PythonDir 'Scripts'),
     $NodeDir,
-    (Join-Path $VSCodeDir 'bin'),
-    (Join-Path $CygwinDir 'bin')
+    (Join-Path $VSCodeDir 'bin')
   ) | Where-Object { Test-Path -LiteralPath $_ }
 
   $CygwinPathEntries = @(
