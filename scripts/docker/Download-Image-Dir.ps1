@@ -9,12 +9,10 @@ Docker Desktop、WSL2、管理者権限、regctl.exe、crane.exe に依存せず
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [Alias("ImageRef")]
     [string]$imageName,
 
-    [Parameter(Mandatory = $true)]
     [ValidateScript({ $_ -gt 0 })]
-    [double]$maxGB,
+    [double]$maxGB = 5,
 
     [string]$OutputRoot,
 

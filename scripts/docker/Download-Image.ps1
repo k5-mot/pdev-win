@@ -1,22 +1,24 @@
 <#
 .SYNOPSIS
-Docker/OCI registry から image を取得し、OCI archive tar として保存します。
+Docker/OCI registry から image を取得し、OCI layout ディレクトリまたは OCI archive tar として保存します。
 
 .DESCRIPTION
 Docker Desktop、WSL2、管理者権限、regctl.exe、crane.exe に依存せず、Docker Registry HTTP API v2 を直接使用します。
-一時的に作成した OCI layout を、docker/podman load -i で読み込める image 名付き tar にまとめます。
+-OutputFormat Dir では OCI layout ディレクトリを保存し、merge.sh を生成します。
+-OutputFormat Tar では一時的に作成した OCI layout を、docker/podman load -i で読み込める tar にまとめます。
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [Alias("ImageRef")]
-    [string]$imageName,
+    [string]$Image,
 
-    [Parameter(Mandatory = $true)]
     [ValidateScript({ $_ -gt 0 })]
-    [double]$maxGB,
+    [double]$maxGB = 5,
 
     [string]$OutputRoot,
+
+    [ValidateSet("Dir", "Tar")]
+    [string]$OutputFormat = "Tar",
 
     [string]$Platform = "linux/amd64",
 
@@ -691,6 +693,7 @@ function New-TarHeader {
 }
 
 $script:MaxWorkDirBytes = [Int64][Math]::Ceiling($maxGB * 1GB)
+$script:MaxDockerDirBytes = [Int64][Math]::Ceiling($maxGB * 1GB)
 $script:TarFileBase = $null
 $script:OutputDir = $null
 
@@ -726,23 +729,132 @@ function Remove-WorkFile {
 
 <#
 .SYNOPSIS
-出力先と同階層に隠し作業ルートを作成します。
+merge.sh のテキストを返します。
+#>
+function New-MergeScriptContent {
+    return @'
+#!/usr/bin/env bash
+set -euo pipefail
+
+state_file="state.json"
+legacy_manifest_file="download-manifest.json"
+docker_dir="docker-dir"
+
+color_ok=$'\033[32m'
+color_warn=$'\033[33m'
+color_error=$'\033[31m'
+color_step=$'\033[36m'
+color_reset=$'\033[0m'
+
+log() {
+  local level="$1"
+  local message="$2"
+  local color="$color_reset"
+  case "$level" in
+    OK) color="$color_ok" ;;
+    WARN) color="$color_warn" ;;
+    ERROR) color="$color_error" ;;
+    STEP) color="$color_step" ;;
+  esac
+  printf '%s[%s]%s %s\n' "$color" "$level" "$color_reset" "$message"
+}
+
+json_value() {
+  local file="$1"
+  local key="$2"
+  sed -n 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$file" | head -n 1
+}
+
+if [[ -f "$state_file" ]]; then
+  file_base="$(json_value "$state_file" "FileBase")"
+  output_tar="$(json_value "$state_file" "OutputTar")"
+  parsed_docker_dir="$(json_value "$state_file" "DockerDir")"
+  if [[ -n "$parsed_docker_dir" ]]; then
+    docker_dir="$parsed_docker_dir"
+  fi
+elif [[ -f "$legacy_manifest_file" ]]; then
+  file_base="$(json_value "$legacy_manifest_file" "FileBase")"
+  output_tar="$(json_value "$legacy_manifest_file" "OutputTar")"
+  parsed_docker_dir="$(json_value "$legacy_manifest_file" "DockerDir")"
+  if [[ -n "$parsed_docker_dir" ]]; then
+    docker_dir="$parsed_docker_dir"
+  fi
+else
+  if [[ ! -d "$docker_dir" ]]; then
+    log ERROR "state.json or docker-dir was not found."
+    exit 1
+  fi
+  file_base="$(basename "$PWD")"
+  output_tar="${file_base}.tar"
+fi
+
+if [[ -z "${file_base:-}" || -z "${output_tar:-}" ]]; then
+  log ERROR "Could not determine output tar name."
+  exit 1
+fi
+
+if [[ -e "$output_tar" ]]; then
+  log ERROR "Output already exists: $output_tar"
+  exit 1
+fi
+
+if [[ ! -d "$docker_dir" ]]; then
+  log ERROR "docker-dir was not found: $docker_dir"
+  exit 1
+fi
+
+blobs_dir="${docker_dir}/blobs/sha256"
+if [[ ! -d "$blobs_dir" ]]; then
+  log ERROR "OCI blobs directory was not found: $blobs_dir"
+  exit 1
+fi
+
+index_file="${docker_dir}/index.json"
+if [[ ! -f "${docker_dir}/oci-layout" || ! -f "$index_file" ]]; then
+  log ERROR "OCI layout files are missing in: $docker_dir"
+  exit 1
+fi
+
+log STEP "Creating OCI archive directly from: $docker_dir"
+(
+  cd "$docker_dir"
+  tar -cf "../$output_tar" oci-layout index.json blobs
+)
+
+if [[ ! -f "$output_tar" ]]; then
+  log ERROR "Failed to create output tar: $output_tar"
+  exit 1
+fi
+
+if command -v docker >/dev/null 2>&1 || command -v podman >/dev/null 2>&1; then
+  log OK "docker/podman command was found."
+else
+  log WARN "docker/podman was not found in PATH; load was not tested."
+fi
+
+log OK "Created: $output_tar"
+log OK "Load with: docker load -i $output_tar"
+'@
+}
+
+<#
+.SYNOPSIS
+出力先の image 名付き作業ルートを作成します。
 .PARAMETER OutputRootPath
 tar archive を作成する出力先ディレクトリです。
+.PARAMETER FileBase
+作業ルート名に含める安全な image 名です。
 .OUTPUTS
-作成した隠し作業ルートの絶対パスを返します。
+作成した作業ルートの絶対パスを返します。
 #>
-function New-HiddenArchiveWorkRoot {
-    param([Parameter(Mandatory = $true)][string]$OutputRootPath)
+function New-ArchiveWorkRoot {
+    param(
+        [Parameter(Mandatory = $true)][string]$OutputRootPath,
+        [Parameter(Mandatory = $true)][string]$FileBase
+    )
 
-    $outputRootParent = Split-Path -Parent $OutputRootPath
-    if ([string]::IsNullOrWhiteSpace($outputRootParent)) {
-        $outputRootParent = $OutputRootPath
-    }
-
-    $workRoot = Join-Path -Path $outputRootParent -ChildPath ".download-image-archive-work"
+    $workRoot = Join-Path -Path $OutputRootPath -ChildPath ("_work_{0}" -f $FileBase)
     $created = New-Item -ItemType Directory -Path $workRoot -Force
-    $created.Attributes = $created.Attributes -bor [System.IO.FileAttributes]::Hidden
 
     return $created.FullName
 }
@@ -936,6 +1048,39 @@ function Confirm-WorkDirCapacity {
 
 <#
 .SYNOPSIS
+docker-dir のサイズ上限を超えそうな場合に退避を促します。
+.PARAMETER DockerDir
+確認対象の docker-dir です。
+.PARAMETER IncomingSizeBytes
+これから追加する blob の byte 数です。
+.PARAMETER ItemName
+ログへ表示する対象名です。
+#>
+function Confirm-DockerDirCapacity {
+    param(
+        [Parameter(Mandatory = $true)][string]$DockerDir,
+        [Parameter(Mandatory = $true)][Int64]$IncomingSizeBytes,
+        [Parameter(Mandatory = $true)][string]$ItemName
+    )
+
+    if ($IncomingSizeBytes -gt $script:MaxDockerDirBytes) {
+        Write-Log ("{0} is larger than the configured limit. item={1:N2} GB limit={2:N2} GB" -f $ItemName, ($IncomingSizeBytes / 1GB), ($script:MaxDockerDirBytes / 1GB)) "WARN"
+        Write-Log "Increase -maxGB for this image, or use an output location that can accept this single blob." "STEP"
+        return $false
+    }
+
+    $currentSize = Get-DirectorySizeBytes -Path $DockerDir
+    if (($currentSize + $IncomingSizeBytes) -le $script:MaxDockerDirBytes) {
+        return $true
+    }
+
+    Write-Log ("docker-dir will exceed the configured limit. current={0:N2} GB incoming={1:N2} GB limit={2:N2} GB" -f ($currentSize / 1GB), ($IncomingSizeBytes / 1GB), ($script:MaxDockerDirBytes / 1GB)) "WARN"
+    Write-Log "Copy this image directory to the file server, delete local docker-dir/blobs/sha256 blobs, then run the same command again." "STEP"
+    return $false
+}
+
+<#
+.SYNOPSIS
 OCI layout の blob ファイルを分割せずに保存します。
 .PARAMETER SourcePath
 保存元ファイルです。
@@ -974,7 +1119,8 @@ function New-DownloadState {
     param(
         [Parameter(Mandatory = $true)][object]$Image,
         [Parameter(Mandatory = $true)][string]$Platform,
-        [Parameter(Mandatory = $true)][string]$FileBase
+        [Parameter(Mandatory = $true)][string]$FileBase,
+        [Parameter(Mandatory = $true)][string]$Format
     )
 
     return [pscustomobject]@{
@@ -984,8 +1130,9 @@ function New-DownloadState {
         FileBase = $FileBase
         OutputTar = "$FileBase.tar"
         DockerDir = "docker-dir"
-        Format = "oci-archive"
+        Format = $Format
         MaxWorkDirBytes = $script:MaxWorkDirBytes
+        MaxDockerDirBytes = $script:MaxDockerDirBytes
         ManifestDigest = $null
         Manifest = $null
         ConfigDigest = $null
@@ -1132,31 +1279,68 @@ function Set-LayerState {
 イメージ取得、state 更新、OCI layout 出力までの主処理を実行します。
 #>
 function Invoke-Main {
-    $image = Split-ImageReference -Reference $imageName
+    $image = Split-ImageReference -Reference $Image
     $resolvedOutputRoot = (New-Item -ItemType Directory -Path $OutputRoot -Force).FullName
+    $isTarOutput = $OutputFormat -eq "Tar"
+    $workRoot = $null
+    $outputTar = $null
     $outputTarName = "$($image.FileBase).tar"
-    $outputTar = Join-Path -Path $resolvedOutputRoot -ChildPath $outputTarName
-    if (Test-Path -LiteralPath $outputTar -PathType Leaf) {
-        if ($Force) {
-            Remove-Item -LiteralPath $outputTar -Force
+    $resumeState = $null
+
+    if ($isTarOutput) {
+        $outputTar = Join-Path -Path $resolvedOutputRoot -ChildPath $outputTarName
+        if (Test-Path -LiteralPath $outputTar -PathType Leaf) {
+            if ($Force) {
+                Remove-Item -LiteralPath $outputTar -Force
+            }
+            else {
+                throw "Output archive already exists. Remove it or pass -Force: $outputTar"
+            }
+        }
+
+        $workRoot = New-ArchiveWorkRoot -OutputRootPath $resolvedOutputRoot -FileBase $image.FileBase
+        $outputDir = Join-Path -Path $workRoot -ChildPath ([guid]::NewGuid().ToString("N"))
+        $created = New-Item -ItemType Directory -Path $outputDir -Force
+        $statePath = Join-Path -Path $created.FullName -ChildPath "state.json"
+        $state = New-DownloadState -Image $image -Platform $Platform -FileBase $image.FileBase -Format "oci-archive"
+        $state.OutputTar = $outputTarName
+    }
+    else {
+        $outputDir = Join-Path -Path $resolvedOutputRoot -ChildPath $image.FileBase
+        $statePath = Join-Path -Path $outputDir -ChildPath "state.json"
+        $resumeState = Read-DownloadState -Path $statePath
+        if ((Test-Path -LiteralPath $outputDir) -and $Force -and $null -eq $resumeState) {
+            Remove-Item -LiteralPath $outputDir -Recurse -Force
+        }
+        elseif ((Test-Path -LiteralPath $outputDir) -and $null -eq $resumeState) {
+            $existing = @(Get-ChildItem -LiteralPath $outputDir -Force -ErrorAction SilentlyContinue)
+            if ($existing.Count -gt 0) {
+                throw "Existing output files were found. Remove them or pass -Force: $outputDir"
+            }
+        }
+
+        $created = New-Item -ItemType Directory -Path $outputDir -Force
+        $statePath = Join-Path -Path $created.FullName -ChildPath "state.json"
+        $resumeState = Read-DownloadState -Path $statePath
+        $state = if ($null -ne $resumeState) {
+            Write-Log "Resuming from state.json" "STEP"
+            $resumeState
         }
         else {
-            throw "Output archive already exists. Remove it or pass -Force: $outputTar"
+            New-DownloadState -Image $image -Platform $Platform -FileBase $image.FileBase -Format "oci-layout"
         }
     }
 
-    $workRoot = New-HiddenArchiveWorkRoot -OutputRootPath $resolvedOutputRoot
-    $outputDir = Join-Path -Path $workRoot -ChildPath ([guid]::NewGuid().ToString("N"))
-    $created = New-Item -ItemType Directory -Path $outputDir -Force
-    $statePath = Join-Path -Path $created.FullName -ChildPath "state.json"
     $tempDir = Join-Path -Path $created.FullName -ChildPath "_work"
     New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
     $dockerDir = Join-Path -Path $created.FullName -ChildPath "docker-dir"
     New-Item -ItemType Directory -Path $dockerDir -Force | Out-Null
     $blobsDir = Join-Path -Path $dockerDir -ChildPath "blobs\sha256"
     New-Item -ItemType Directory -Path $blobsDir -Force | Out-Null
-    $state = New-DownloadState -Image $image -Platform $Platform -FileBase $image.FileBase
-    $state.OutputTar = $outputTarName
+    if (-not $isTarOutput) {
+        $mergeDest = Join-Path -Path $created.FullName -ChildPath "merge.sh"
+        Write-Utf8NoBomFile -Path $mergeDest -Text ((New-MergeScriptContent) -replace "`r`n", "`n")
+    }
     Save-DownloadState -State $state -Path $statePath
 
     $script:OutputDir = $created.FullName
@@ -1195,7 +1379,13 @@ function Invoke-Main {
         Remove-WorkFile -Path $manifestBlobPath
     }
     else {
-        if (-not (Confirm-WorkDirCapacity -WorkDir $created.FullName -IncomingSizeBytes ([Int64]$manifestBytes.Length) -ItemName "manifest blob")) {
+        $hasCapacity = if ($isTarOutput) {
+            Confirm-WorkDirCapacity -WorkDir $created.FullName -IncomingSizeBytes ([Int64]$manifestBytes.Length) -ItemName "manifest blob"
+        }
+        else {
+            Confirm-DockerDirCapacity -DockerDir $dockerDir -IncomingSizeBytes ([Int64]$manifestBytes.Length) -ItemName "manifest blob"
+        }
+        if (-not $hasCapacity) {
             Save-DownloadState -State $state -Path $statePath
             Remove-WorkFile -Path $manifestBlobPath
             return
@@ -1219,7 +1409,13 @@ function Invoke-Main {
         Write-Log "Skipping completed config blob: $configDigest" "OK"
     }
     else {
-        if (-not (Confirm-WorkDirCapacity -WorkDir $created.FullName -IncomingSizeBytes $configSize -ItemName "config blob")) {
+        $hasCapacity = if ($isTarOutput) {
+            Confirm-WorkDirCapacity -WorkDir $created.FullName -IncomingSizeBytes $configSize -ItemName "config blob"
+        }
+        else {
+            Confirm-DockerDirCapacity -DockerDir $dockerDir -IncomingSizeBytes $configSize -ItemName "config blob"
+        }
+        if (-not $hasCapacity) {
             Save-DownloadState -State $state -Path $statePath
             return
         }
@@ -1257,7 +1453,13 @@ function Invoke-Main {
 
         Set-LayerState -State $state -Index $layerIndex -Digest $digest -DiffId $null -Status "downloading" -MediaType $mediaType -Size $layerSize
         Save-DownloadState -State $state -Path $statePath
-        if (-not (Confirm-WorkDirCapacity -WorkDir $created.FullName -IncomingSizeBytes $layerSize -ItemName ("layer {0}" -f $layerIndex))) {
+        $hasCapacity = if ($isTarOutput) {
+            Confirm-WorkDirCapacity -WorkDir $created.FullName -IncomingSizeBytes $layerSize -ItemName ("layer {0}" -f $layerIndex)
+        }
+        else {
+            Confirm-DockerDirCapacity -DockerDir $dockerDir -IncomingSizeBytes $layerSize -ItemName ("layer {0}" -f $layerIndex)
+        }
+        if (-not $hasCapacity) {
             Save-DownloadState -State $state -Path $statePath
             return
         }
@@ -1294,16 +1496,28 @@ function Invoke-Main {
     }
     Write-Utf8NoBomFile -Path (Join-Path -Path $dockerDir -ChildPath "index.json") -Text ($index | ConvertTo-Json -Depth 10)
 
-    Write-Log ("OCI layout created in a temporary work directory. Limit={0:N2} GB." -f $maxGB) "OK"
-    Write-Log ("Creating archive: {0}" -f $outputTar) "STEP"
-    New-OciArchiveTar -DockerDir $dockerDir -OutputTar $outputTar
-    $state.ArchiveCompleted = $true
-    Save-DownloadState -State $state -Path $statePath
+    if ($isTarOutput) {
+        Write-Log ("OCI layout created in a temporary work directory. Limit={0:N2} GB." -f $maxGB) "OK"
+        Write-Log ("Creating archive: {0}" -f $outputTar) "STEP"
+        New-OciArchiveTar -DockerDir $dockerDir -OutputTar $outputTar
+        $state.ArchiveCompleted = $true
+        Save-DownloadState -State $state -Path $statePath
 
-    Remove-Item -LiteralPath $created.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
 
-    Write-Log ("Created: {0}" -f $outputTar) "OK"
-    Write-Log ("Load with: docker load -i {0}" -f $outputTar) "OK"
+        Write-Log ("Created: {0}" -f $outputTar) "OK"
+        Write-Log ("Load with: docker load -i {0}" -f $outputTar) "OK"
+    }
+    else {
+        Write-Log ("OCI docker-dir created. Keep each transferred docker-dir copy within {0:N2} GB." -f $maxGB) "OK"
+        $state.ArchiveCompleted = $true
+        Save-DownloadState -State $state -Path $statePath
+
+        Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+
+        Write-Log ("Complete: {0}" -f $created.FullName) "OK"
+        Write-Log ("Run 'bash merge.sh' in the copied directory to create {0}.tar." -f $image.FileBase) "OK"
+    }
 }
 
 try {
