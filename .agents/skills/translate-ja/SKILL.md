@@ -10,18 +10,30 @@ description: Sequentially translate English PDF documents into Japanese Markdown
 1. Install runtime dependencies in the active Python environment:
 
 ```bash
-python -m pip install -U docling openai python-dotenv
+python -m pip install -U docling openai python-dotenv requests
 ```
 
-2. Configure OpenAI-compatible API settings in `.env`. `translate_ja.py` reads `.env` from the skill directory, then from the current working directory. An explicit `--env-file` path overrides both.
+2. Configure OpenAI-compatible API settings in `.env`. `translate_ja.py` and `convert_to_md_remote.py` read `.env` from the skill directory, then from the current working directory. An explicit `--env-file` path overrides both.
 
 ```bash
 OPENAI_BASE_URL=http://localhost:40000
 OPENAI_API_KEY=sk-litellm-master-key
 OPENAI_MODEL=gemma4:31b
+DOCLING_SERVE_BASE_URL=http://localhost:50000
+DOCLING_SERVE_API_KEY=sk-docling-serve-api-key
 ```
 
-3. Convert the source English PDF into Markdown plus image assets:
+3. Convert the source English PDF into Markdown plus image assets. Prefer docling-serve when `DOCLING_SERVE_BASE_URL` is configured and the container is ready:
+
+```bash
+python /path/to/translate-ja/scripts/convert_to_md_remote.py /path/to/source.pdf /path/to/workdir
+```
+
+`convert_to_md_remote.py` submits a job to `POST /v1/convert/file/async` with `target_type=zip`, `to_formats=md`, `image_export_mode=referenced`, and `include_images=true`, polls `/v1/status/poll/{task_id}`, then fetches `/v1/result/{task_id}`. It writes `workdir/document.md` and extracts referenced PNG/JPEG image assets from the zip response.
+
+The remote converter uses the full analysis profile by default: `dlparse_v4`, OCR, accurate table structure, layout preset, picture classification, picture description, code/formula enrichment, and chart extraction. It defaults to `ocr_preset=tesseract`, `table_structure_preset=tableformerv2`, and `picture_description_preset=granite_vision`; override them with `--ocr-preset`, `--table-structure-preset`, or `--picture-description-preset` if the server exposes different presets.
+
+If docling-serve is unavailable, fall back to local Docling:
 
 ```bash
 python /path/to/translate-ja/scripts/convert_to_md.py /path/to/source.pdf /path/to/workdir
@@ -59,5 +71,6 @@ By default, `translate_ja.py` reads `assets/glossary.csv` and applies its `engli
 ## Scripts
 
 - `scripts/convert_to_md.py`: Convert a PDF to `document.md` with Docling.
+- `scripts/convert_to_md_remote.py`: Convert a PDF to `document.md` plus referenced image assets using docling-serve `POST /v1/convert/file/async`.
 - `scripts/chunk_text.py`: Split Markdown into sentence-complete chunks capped by word count.
 - `scripts/translate_ja.py`: Translate each chunk with OpenAI and assemble Japanese Markdown incrementally.

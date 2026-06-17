@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Chunk Markdown into English sentence-complete files of 500 words or fewer."""
+"""Markdownを英語文単位で分割し、指定語数以下のチャンクファイルにする。"""
 
 from __future__ import annotations
 
@@ -24,15 +24,18 @@ class Chunk:
 
 
 def count_words(text: str) -> int:
+    """英数字ベースで英単語数を数える。"""
     return len(WORD_RE.findall(text))
 
 
 def split_sentences(markdown: str) -> list[str]:
+    """Markdownを、翻訳単位として扱いやすい英語文のリストへ分解する。"""
     sentences: list[str] = []
     in_fence = False
     buffer: list[str] = []
 
     def flush_buffer() -> None:
+        """通常テキストのバッファを文単位に切り出して結果へ移す。"""
         nonlocal buffer
         text = "".join(buffer).strip()
         buffer = []
@@ -44,6 +47,7 @@ def split_sentences(markdown: str) -> list[str]:
                 sentences.append(sentence)
 
     for line in markdown.splitlines(keepends=True):
+        # コードフェンスの中身は文分割せず、そのまま独立した要素として残す。
         if line.lstrip().startswith("```"):
             flush_buffer()
             in_fence = not in_fence
@@ -51,6 +55,7 @@ def split_sentences(markdown: str) -> list[str]:
             continue
 
         stripped = line.strip()
+        # 画像参照や空行も文へ混ぜず、Markdown構造を保つために単独で扱う。
         if in_fence or stripped.startswith("!") or not stripped:
             flush_buffer()
             if stripped:
@@ -64,6 +69,7 @@ def split_sentences(markdown: str) -> list[str]:
 
 
 def build_chunks(sentences: list[str], max_words: int) -> list[str]:
+    """文の順序を保ったまま、最大語数を超えないチャンクへまとめる。"""
     chunks: list[str] = []
     current: list[str] = []
     current_words = 0
@@ -85,6 +91,7 @@ def build_chunks(sentences: list[str], max_words: int) -> list[str]:
 
 
 def write_chunks(markdown_path: Path, output_dir: Path, max_words: int) -> Path:
+    """チャンクファイルと再開用マニフェストを書き出す。"""
     markdown = markdown_path.read_text(encoding="utf-8")
     sentences = split_sentences(markdown)
     chunk_texts = build_chunks(sentences, max_words)
@@ -115,6 +122,7 @@ def write_chunks(markdown_path: Path, output_dir: Path, max_words: int) -> Path:
 
 
 def main() -> int:
+    """コマンドライン引数を読み取り、Markdownのチャンク化を実行する。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("markdown", type=Path, help="Input English Markdown file.")
     parser.add_argument("output_dir", type=Path, help="Output chunks directory.")

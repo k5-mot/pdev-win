@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Translate Markdown chunks to Japanese with OpenAI and assemble the result."""
+"""MarkdownチャンクをOpenAI互換APIで日本語へ翻訳し、最終Markdownを組み立てる。"""
 
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ class GlossaryEntry:
 
 
 def load_manifest(chunks_dir: Path) -> dict:
+    """チャンク一覧と順序を記録したマニフェストを読み込む。"""
     manifest_path = chunks_dir / "chunks-manifest.json"
     if not manifest_path.is_file():
         raise SystemExit(f"Manifest not found: {manifest_path}")
@@ -37,6 +38,7 @@ def load_manifest(chunks_dir: Path) -> dict:
 
 
 def load_glossary(glossary_path: Optional[Path]) -> list[GlossaryEntry]:
+    """CSV用語集を読み込み、英語-日本語の対応リストへ変換する。"""
     if glossary_path is None:
         return []
 
@@ -47,6 +49,7 @@ def load_glossary(glossary_path: Optional[Path]) -> list[GlossaryEntry]:
     entries: list[GlossaryEntry] = []
     with resolved.open("r", encoding="utf-8-sig", newline="") as fh:
         reader = csv.DictReader(fh)
+        # ヘッダー付きCSVを優先し、notes列があればプロンプト補足として使う。
         if reader.fieldnames and {"english", "japanese"}.issubset(set(reader.fieldnames)):
             for row in reader:
                 english = (row.get("english") or "").strip()
@@ -56,6 +59,7 @@ def load_glossary(glossary_path: Optional[Path]) -> list[GlossaryEntry]:
                     entries.append(GlossaryEntry(english=english, japanese=japanese, notes=notes))
             return entries
 
+    # ヘッダーなしCSVも扱えるようにして、既存の簡易用語集をそのまま使えるようにする。
     with resolved.open("r", encoding="utf-8-sig", newline="") as fh:
         for row in csv.reader(fh):
             if len(row) >= 2 and row[0].strip() and row[1].strip():
@@ -70,11 +74,13 @@ def load_glossary(glossary_path: Optional[Path]) -> list[GlossaryEntry]:
 
 
 def relevant_glossary_entries(source: str, entries: list[GlossaryEntry]) -> list[GlossaryEntry]:
+    """翻訳対象に登場する用語集エントリだけを抽出する。"""
     source_lower = source.lower()
     return [entry for entry in entries if entry.english.lower() in source_lower]
 
 
 def format_glossary(entries: list[GlossaryEntry]) -> str:
+    """LLMプロンプトへ挿入する用語集テキストを作る。"""
     if not entries:
         return ""
 
@@ -89,6 +95,7 @@ def format_glossary(entries: list[GlossaryEntry]) -> str:
 
 
 def glossary_pattern(term: str) -> re.Pattern[str]:
+    """英数字語の途中に誤って一致しない用語置換パターンを作る。"""
     escaped = re.escape(term)
     prefix = r"(?<![A-Za-z0-9])" if term[0].isalnum() else ""
     suffix = r"(?![A-Za-z0-9])" if term[-1].isalnum() else ""
@@ -96,6 +103,7 @@ def glossary_pattern(term: str) -> re.Pattern[str]:
 
 
 def replace_unprotected_text(text: str, entries: list[GlossaryEntry]) -> str:
+    """コード、URL、インラインコードを避けて用語集の表記を適用する。"""
     if not entries:
         return text
 
@@ -104,9 +112,11 @@ def replace_unprotected_text(text: str, entries: list[GlossaryEntry]) -> str:
     patterns = [(glossary_pattern(entry.english), entry.japanese) for entry in entries]
 
     def replace_plain(segment: str) -> str:
+        """保護対象を退避してから、通常テキスト部分だけを置換する。"""
         protected: list[str] = []
 
         def stash(match: re.Match[str]) -> str:
+            """置換してはいけない断片を一時トークンに差し替える。"""
             protected.append(match.group(0))
             return f"\0{len(protected) - 1}\0"
 
@@ -121,6 +131,7 @@ def replace_unprotected_text(text: str, entries: list[GlossaryEntry]) -> str:
     lines: list[str] = []
     in_fence = False
     for line in text.splitlines(keepends=True):
+        # コードフェンス内はコマンドや識別子を壊しやすいため、用語置換を行わない。
         if line.lstrip().startswith("```"):
             in_fence = not in_fence
             lines.append(line)
@@ -136,6 +147,7 @@ def translate_text(
     temperature: float,
     glossary_entries: list[GlossaryEntry],
 ) -> str:
+    """1チャンク分のMarkdownを日本語へ翻訳し、用語集表記を整える。"""
     relevant_entries = relevant_glossary_entries(source, glossary_entries)
     glossary_prompt = format_glossary(relevant_entries)
     user_prompt = (
@@ -157,10 +169,12 @@ def translate_text(
 
 
 def default_glossary_path() -> Path:
+    """スキル同梱の既定用語集パスを返す。"""
     return Path(__file__).resolve().parents[1] / "assets" / "glossary.csv"
 
 
 def load_env_file(env_file: Optional[Path]) -> None:
+    """スキル配下、カレントディレクトリ、明示指定の順に.envを読み込む。"""
     try:
         from dotenv import load_dotenv
     except ImportError as exc:
@@ -182,14 +196,17 @@ def load_env_file(env_file: Optional[Path]) -> None:
 
 
 def get_api_key() -> str:
+    """OpenAI互換APIキーを取得し、未設定時はローカルAPI向けのダミー値を返す。"""
     return os.environ.get("OPENAI_API_KEY") or "EMPTY"
 
 
 def get_base_url() -> str | None:
+    """OpenAI互換APIのベースURLを取得する。"""
     return os.environ.get("OPENAI_BASE_URL") or "http://localhost:4000"
 
 
 def assemble_output(ja_dir: Path, output_path: Path, chunk_count: int) -> None:
+    """翻訳済みチャンクを番号順に結合して最終Markdownを書き直す。"""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     parts: list[str] = []
     for index in range(1, chunk_count + 1):
@@ -210,6 +227,7 @@ def translate_chunks(
     force: bool,
     sleep_seconds: float,
 ) -> None:
+    """未翻訳チャンクを順番に翻訳し、途中結果を保存しながら最終出力を更新する。"""
     try:
         from openai import OpenAI
     except ImportError as exc:
@@ -232,6 +250,7 @@ def translate_chunks(
         target_path = ja_dir / f"chunk-{index:04d}.ja.md"
 
         if target_path.is_file() and not force:
+            # 再実行時は既存チャンクを再利用し、途中停止した続きから進める。
             assemble_output(ja_dir, output_path, len(chunks))
             continue
 
@@ -246,6 +265,7 @@ def translate_chunks(
 
 
 def main() -> int:
+    """コマンドライン引数を読み取り、チャンク翻訳を実行する。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("chunks_dir", type=Path, help="Directory produced by chunk_text.py.")
     parser.add_argument("output_markdown", type=Path, help="Final Japanese Markdown path.")

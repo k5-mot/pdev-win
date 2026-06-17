@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert an English PDF to Markdown plus Docling image artifacts."""
+"""英語PDFをMarkdownとDoclingの画像アーティファクトへ変換する。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pathlib import Path
 
 
 def convert_pdf(pdf_path: Path, output_dir: Path, output_name: str) -> Path:
+    """ローカルDoclingでPDFを変換し、Markdownファイルのパスを返す。"""
     try:
         from docling.document_converter import DocumentConverter
     except ImportError as exc:
@@ -28,6 +29,7 @@ def convert_pdf(pdf_path: Path, output_dir: Path, output_name: str) -> Path:
     result = converter.convert(str(pdf_path))
     document = result.document
 
+    # 新しいDoclingではsave_as_markdownが画像ファイルの書き出しまで面倒を見てくれる。
     if ImageRefMode is not None and hasattr(document, "save_as_markdown"):
         try:
             document.save_as_markdown(md_path, image_mode=ImageRefMode.REFERENCED)
@@ -35,6 +37,7 @@ def convert_pdf(pdf_path: Path, output_dir: Path, output_name: str) -> Path:
         except TypeError:
             pass
 
+    # 古いDoclingではexport_to_markdownだけが使えるため、文字列として受け取って保存する。
     markdown = None
     if hasattr(document, "export_to_markdown"):
         if ImageRefMode is not None:
@@ -53,6 +56,7 @@ def convert_pdf(pdf_path: Path, output_dir: Path, output_name: str) -> Path:
 
 
 def main() -> int:
+    """コマンドライン引数を読み取り、PDF変換を実行する。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("pdf", type=Path, help="Input English PDF path.")
     parser.add_argument("output_dir", type=Path, help="Directory for Markdown and image assets.")
