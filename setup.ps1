@@ -44,6 +44,12 @@ $ConfigDir = Join-Path $Root '.config'
 $LogDir = Join-Path $Root '.local/logs'
 $TmpDir = Join-Path $Root '.local/tmp'
 $LogFile = Join-Path $LogDir ('install-v9-sepa-{0:yyyyMMdd-HHmmss-fffffff}-{1}.log' -f (Get-Date), $PID)
+$CodexConfigTemplateDir = if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+  $null
+} else {
+  Join-Path $PSScriptRoot 'config/.codex'
+}
+$CodexConfigDir = Join-Path $ConfigDir 'codex'
 $VSCodeExtensions = @(
 #   'ms-vscode-remote.vscode-remote-extensionpack',
 #   'ms-vscode-remote.remote-wsl',
@@ -843,6 +849,20 @@ function Write-VSCodeExtensionRecommendations {
 
 <#
 .SYNOPSIS
+Codex の user-level config template を portable CODEX_HOME へコピーします。
+#>
+function Copy-CodexConfigTemplate {
+  if ($null -eq $CodexConfigTemplateDir -or (-not (Test-Path -LiteralPath $CodexConfigTemplateDir))) {
+    Write-Log 'Codex config template was not found; skipping portable CODEX_HOME config.' 'WARN'
+    return
+  }
+
+  New-Directory $CodexConfigDir
+  Copy-Item -Path (Join-Path $CodexConfigTemplateDir '*') -Destination $CodexConfigDir -Recurse -Force
+}
+
+<#
+.SYNOPSIS
 VSCode CLI を使って拡張機能を portable extensions dir にインストールします。
 .PARAMETER VSCodeDir
 VSCode のインストール先ディレクトリです。
@@ -981,7 +1001,6 @@ set "VSCODE_USER_DATA=%ROOT%\.local\opt\vscode\data\user-data"
 set "VSCODE_EXTENSIONS=%ROOT%\.local\opt\vscode\data\extensions"
 set "CODEX_HOME=%ROOT%\.config\codex"
 set "CODEX_SQLITE_HOME=%ROOT%\.cache\codex"
-set "LITELLM_API_KEY=sk-litellm-master-key"
 
 start "" /min "%CODE%" ^
     --user-data-dir "%VSCODE_USER_DATA%" ^
@@ -1008,7 +1027,6 @@ set "npm_config_cache=%ROOT%\.local\pkg\npm-cache"
 set "npm_config_prefix=%ROOT%\.local\opt\nodejs"
 set "CODEX_HOME=%ROOT%\.config\codex"
 set "CODEX_SQLITE_HOME=%ROOT%\.cache\codex"
-set "LITELLM_API_KEY=sk-litellm-master-key"
 powershell.exe -NoLogo
 popd
 endlocal
@@ -1113,6 +1131,7 @@ try {
 
   Write-VSCodeSettings -VSCodeDir $VSCodeDir -PowerShellPathEntries $PowerShellPathEntries
   Write-VSCodeExtensionRecommendations -VSCodeDir $VSCodeDir
+  Copy-CodexConfigTemplate
   Install-VSCodeExtensions -VSCodeDir $VSCodeDir
   Write-Launchers -VSCodeDir $VSCodeDir -PowerShellPathEntries $PowerShellPathEntries
 

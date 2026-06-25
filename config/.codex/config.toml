@@ -4,7 +4,7 @@ model_provider = "litellm"
 [model_providers.litellm]
 name = "LiteLLM"
 base_url = "http://litellm:4000/v1"
-env_key = "LITELLM_API_KEY"
+http_headers = { "Authorization" = "Bearer sk-litellm-master-key" }
 wire_api = "responses"
 
 [windows]
