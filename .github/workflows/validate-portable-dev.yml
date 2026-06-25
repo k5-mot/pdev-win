@@ -5,13 +5,13 @@ on:
     paths:
       - "setup.ps1"
       - "setup_cygwin.ps1"
-      - "config/portable-tools.json"
+      - "config/**"
       - ".github/workflows/validate-portable-dev.yml"
   pull_request:
     paths:
       - "setup.ps1"
       - "setup_cygwin.ps1"
-      - "config/portable-tools.json"
+      - "config/**"
       - ".github/workflows/validate-portable-dev.yml"
   workflow_dispatch:
 
@@ -99,6 +99,7 @@ jobs:
             '.local\opt\vscode\data\extensions',
             '.local\opt\cygwin\bin\bash.exe',
             '.config\pip\pip.ini',
+            '.config\codex\config.toml',
             '.local\pkg',
             '.local\tmp',
             '.local\logs',
