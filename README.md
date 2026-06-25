@@ -113,10 +113,10 @@ $Root = Join-Path ([Environment]::GetFolderPath('Desktop')) 'pdev'
 
 ## 📚 Documentation
 
-- 仕様とディレクトリ構成: [docs/SPEC.md](docs/SPEC.md)
 - トラブルシューティング: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
-- コーディング規約: [docs/CODING_RULES.md](docs/CODING_RULES.md)
 - image download scripts: [scripts/README.md](scripts/README.md)
+
+開発仕様、実装要件、コーディング規約は [openspec/specs](openspec/specs) に集約しています。
 
 ## ✅ Local Validation
 

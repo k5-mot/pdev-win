@@ -1,0 +1,19 @@
+schema: spec-driven
+
+context: |
+  Project: pdev-win, a Windows PowerShell portable development environment bootstrap.
+  Documentation boundary:
+    - OpenSpec is the source of truth for development requirements, implementation contracts, contribution rules, and maintainer workflow requirements.
+    - README, docs/, and script README files are for user-facing manuals, troubleshooting, and operational instructions.
+    - Do not duplicate OpenSpec requirements as standalone docs under docs/.
+  Commit convention: Japanese gitmoji Conventional Commits in the form "<gitmoji> <type>: <summary>".
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
