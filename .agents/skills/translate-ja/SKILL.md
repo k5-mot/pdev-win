@@ -41,13 +41,21 @@ python /path/to/translate-ja/scripts/convert_to_md.py /path/to/source.pdf /path/
 
 This writes `workdir/document.md` and Docling image artifacts next to it when Docling can export referenced images.
 
-4. Chunk the Markdown into English sentence-complete chunks of 500 words or fewer:
+4. Chunk the Markdown. Prefer docling-serve when `DOCLING_SERVE_BASE_URL` is configured and `/ready` succeeds:
+
+```bash
+python /path/to/translate-ja/scripts/chunk_text_remote.py /path/to/workdir/document.md /path/to/workdir/chunks --max-words 500
+```
+
+`chunk_text_remote.py` submits the file to `POST /v1/chunk/{path_name}/file/async` using the `hierarchical` chunker by default, polls `/v1/status/poll/{task_id}`, fetches `/v1/result/{task_id}`, and writes the same `chunks/en/chunk-0001.md` plus `chunks-manifest.json` layout used by `translate_ja.py`. Use `--chunker hybrid` to switch to the hybrid chunker when the server supports it for the input format. It records `--max-words` for compatibility and passes the value as `chunking_max_tokens` unless `--max-tokens` is provided.
+
+If docling-serve is unavailable, fall back to local sentence-complete Markdown chunking:
 
 ```bash
 python /path/to/translate-ja/scripts/chunk_text.py /path/to/workdir/document.md /path/to/workdir/chunks --max-words 500
 ```
 
-Chunking joins consecutive English sentences until adding another sentence would exceed `--max-words`. For example, 300 words + 150 words + 100 words becomes one 450-word chunk followed by one 100-word chunk. A single sentence over the limit is emitted as its own chunk.
+Local chunking joins consecutive English sentences until adding another sentence would exceed `--max-words`. For example, 300 words + 150 words + 100 words becomes one 450-word chunk followed by one 100-word chunk. A single sentence over the limit is emitted as its own chunk.
 
 5. Translate chunks sequentially with OpenAI and append results into Japanese Markdown:
 
@@ -72,5 +80,6 @@ By default, `translate_ja.py` reads `assets/glossary.csv` and applies its `engli
 
 - `scripts/convert_to_md.py`: Convert a PDF to `document.md` with Docling.
 - `scripts/convert_to_md_remote.py`: Convert a PDF to `document.md` plus referenced image assets using docling-serve `POST /v1/convert/file/async`.
+- `scripts/chunk_text_remote.py`: Split a document with docling-serve `POST /v1/chunk/{path_name}/file/async` and write the standard chunk manifest.
 - `scripts/chunk_text.py`: Split Markdown into sentence-complete chunks capped by word count.
 - `scripts/translate_ja.py`: Translate each chunk with OpenAI and assemble Japanese Markdown incrementally.

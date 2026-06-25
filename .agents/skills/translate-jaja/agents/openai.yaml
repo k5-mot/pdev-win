@@ -1,0 +1,6 @@
+interface:
+  display_name: "日本語翻訳"
+  short_description: "英語PDFを日本語Markdownへ翻訳します"
+  default_prompt: "$translate-jaja を使って、英語PDFを日本語Markdownへ段階的に翻訳してください。"
+policy:
+  allow_implicit_invocation: true
