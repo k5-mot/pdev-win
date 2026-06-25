@@ -2,7 +2,7 @@
 
 `pdev` は、Windows の Desktop 配下にポータブル開発環境を作成する PowerShell スクリプトです。
 
-管理者権限を使わず、Python、Node.js、VS Code、Cygwin、便利な CLI tools を検証済みの `$Root` 配下に配置します。既定のインストール先は、OS が解決した Desktop 配下の `pdev` です。
+管理者権限を使わず、Python、Node.js、VS Code、便利な CLI tools を検証済みの `$Root` 配下に配置します。Cygwin は必要な場合だけ `setup_cygwin.ps1` で追加します。既定のインストール先は、OS が解決した Desktop 配下の `pdev` です。
 
 ## 🧩 Installed Tools
 
@@ -13,16 +13,15 @@
 - pandoc
 - bat
 - bottom
+- crane
 - delta
 - dust
 - eza
 - fd
-- genact
 - hyperfine
 - procs
 - ripgrep
 - Visual Studio Code
-- Cygwin
 
 Python には `setuptools`、`wheel`、`python-docx`、`pypdf`、`Pillow` も追加します。Node.js には npm global package として `npm` と `cowsay` をインストールします。
 
@@ -66,6 +65,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 `
   -Force
 ```
 
+## 🐚 Optional Cygwin
+
+Cygwin が必要な場合は、基本セットアップ後に追加スクリプトを実行します。
+
+```powershell
+# Cygwin を同じ Root 配下へ追加する。
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_cygwin.ps1 `
+  -Root "$env:USERPROFILE\Desktop\pdev"
+```
+
+`setup_cygwin.ps1` は `$Root\.local\opt\cygwin` を作成し、`$Root\Cygwin.cmd` を生成します。VS Code portable settings が存在する場合は、integrated terminal の `Cygwin` profile も追記します。
+
 ## 🚀 Launch
 
 セットアップ完了後、Root 直下のランチャーから起動します。
@@ -80,13 +91,13 @@ $Root = Join-Path ([Environment]::GetFolderPath('Desktop')) 'pdev'
 & "$Root\VSCode.cmd"
 ```
 
-Cygwin:
+Optional Cygwin:
 
 ```powershell
 # 1. 既定の Root を組み立てる。
 $Root = Join-Path ([Environment]::GetFolderPath('Desktop')) 'pdev'
 
-# 2. Cygwin launcher を起動する。
+# 2. setup_cygwin.ps1 実行後に Cygwin launcher を起動する。
 & "$Root\Cygwin.cmd"
 ```
 
@@ -106,3 +117,15 @@ $Root = Join-Path ([Environment]::GetFolderPath('Desktop')) 'pdev'
 - トラブルシューティング: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 - コーディング規約: [docs/CODING_RULES.md](docs/CODING_RULES.md)
 - image download scripts: [scripts/README.md](scripts/README.md)
+
+## ✅ Local Validation
+
+GitHub Actions workflow の検証には、マシンにインストールした `actionlint` を使います。
+
+```powershell
+# 1. actionlint をマシンへインストールする。
+winget install --id rhysd.actionlint --exact
+
+# 2. workflow を静的検証する。
+actionlint ".github/workflows/validate-portable-dev.yml"
+```

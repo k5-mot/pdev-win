@@ -14,18 +14,19 @@
 - pandoc
 - bat
 - bottom
+- crane
 - delta
 - dust
 - eza
 - fd
-- genact
 - hyperfine
 - procs
 - ripgrep
 - Visual Studio Code
-- Cygwin
 
-インストール後は PATH を構成し、各ツールが利用可能であることを検証する。VS Code、Cygwin、PowerShell は `$Root` 直下に生成されるランチャーから起動する。
+Cygwin は `setup_cygwin.ps1` で必要な場合だけ追加する。
+
+インストール後は PATH を構成し、各ツールが利用可能であることを検証する。VS Code と PowerShell は `$Root` 直下に生成されるランチャーから起動する。
 
 ## 2. 🧭 実行環境と制約
 
@@ -40,7 +41,8 @@
 - バイナリ、ユーザーデータ、設定、キャッシュ、ログ、一時ファイルは原則として `$Root` 配下に配置する。
 - ランチャーはネットワークパスでも起動できるよう、実行前に作業ディレクトリを確立する。
 - 検証時はユーザーまたはシステム PATH 上の同名ツールではなく、検証済み `$Root` 配下の shim または実体パスを優先する。
-- インストール時に GitHub、Python.org、Node.js、PyPI、VS Code update endpoint、Cygwin mirror へアクセスする。
+- `setup.ps1` の実行時に GitHub、Python.org、Node.js、PyPI、VS Code update endpoint へアクセスする。
+- `setup_cygwin.ps1` の実行時に Cygwin mirror へアクセスする。
 
 ## 3. 🗂️ ディレクトリ構成
 
@@ -63,11 +65,11 @@ pdev/
       pandoc/
       bat/
       bottom/
+      crane/
       delta/
       dust/
       eza/
       fd/
-      genact/
       hyperfine/
       procs/
       ripgrep/
@@ -77,9 +79,7 @@ pdev/
             settings.json
             extensions.json
           extensions/
-      cygwin/
     pkg/
-      cygwin/
       pip-cache/
       uv-cache/
       npm-cache/
@@ -89,11 +89,10 @@ pdev/
     pip/
       pip.ini
   VSCode.cmd
-  Cygwin.cmd
   PowerShell.cmd
 ```
 
-Root 直下にはランチャーのみを置き、ツール本体、設定、キャッシュ、ログ、一時ファイルは `$Root` 配下のサブディレクトリへ分ける。固定的に導入する単体 CLI は `.local/bin` の shim を主入口とし、Python、Node.js、VS Code、Cygwin は追加コマンドや周辺ファイルを自然に扱えるよう `.local/opt` 配下の実体ディレクトリを PATH に追加する。
+Root 直下にはランチャーのみを置き、ツール本体、設定、キャッシュ、ログ、一時ファイルは `$Root` 配下のサブディレクトリへ分ける。固定的に導入する単体 CLI は `.local/bin` の shim を主入口とし、Python、Node.js、VS Code は追加コマンドや周辺ファイルを自然に扱えるよう `.local/opt` 配下の実体ディレクトリを PATH に追加する。
 
 ### 3.1 `.local/bin`
 
@@ -118,6 +117,10 @@ zip 展開などの一時ファイルを格納する。
 ### 3.6 `.config`
 
 pip 設定を格納する。
+
+### 3.7 `config/portable-tools.json`
+
+GitHub Releases から取得する portable CLI tools の manifest を格納する。各エントリは `name`、`repo`、`assetPattern`、`exeName`、`shimName`、`versionArgs` を持つ。`setup.ps1` はこの manifest を優先して読み込み、見つからない場合はスクリプト内蔵の既定 manifest を使う。
 
 ## 4. ⚙️ 導入方法
 
@@ -160,18 +163,23 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 `
 
 `NodeVersion` と `UvVersion` は `v` 接頭辞の有無を許容する。`JqVersion` は `jq-` 接頭辞の有無を許容する。
 
-### 5.3 Cygwin 引数
-
-- `CygwinPackages`
-  - 既定値は `bash,coreutils,curl,git,openssh,vim,nano,make,gcc-core,gcc-g++,tmux`。
-  - Cygwin 本体のインストール先は `$Root\.local\opt\cygwin`。
-
-### 5.4 その他
+### 5.3 その他
 
 - `Force`
   - 既存キャッシュや展開先を上書きして再実行する。
 
 `PipVersion` や `SkipVSCodeLaunch` は用意しない。
+
+### 5.4 `setup_cygwin.ps1` の引数
+
+- `Root`
+  - Cygwin を追加するポータブル開発環境の基準ディレクトリ。
+  - 既定値は OS から解決した `Desktop` 配下の `pdev`。
+- `CygwinPackages`
+  - 既定値は `bash,coreutils,curl,git,openssh,vim,nano,make,gcc-core,gcc-g++,tmux,jq`。
+  - Cygwin 本体のインストール先は `$Root\.local\opt\cygwin`。
+- `Force`
+  - 既存キャッシュや展開先を上書きして再実行する。
 
 ## 6. 🧪 PowerShell スクリプト要件
 
@@ -186,16 +194,15 @@ PowerShell スクリプトは以下を実行する。
 7. Python embeddable zip の `python*._pth` で `import site` を有効化する。
 8. PyPI JSON から pip wheel を取得し、wheel から pip をインストールする。
 9. pip 用の `.config\pip\pip.ini` を生成する。
-10. GitHub Releases から portable CLI tools の Windows x64 asset を取得し、`.local\opt` 配下に展開または配置する。
+10. `config/portable-tools.json` の manifest に従い、GitHub Releases から portable CLI tools の Windows x64 asset を取得し、`.local\opt` 配下に展開または配置する。取得できなかった tool は最後にまとめて報告し、セットアップを失敗させる。
 11. VS Code portable mode 用の `data` ディレクトリを作成する。
-12. Cygwin mirror を選択し、公式 `setup-x86_64.exe` を CLI 実行する。
-13. 固定 CLI 用の cmd shim を `.local\bin` に生成する。
-14. 現プロセスの PATH に `.local\bin` と必要な `.local\opt` 配下の実体ディレクトリを追加し、キャッシュ関連環境変数を構成する。
-15. VS Code settings と extensions recommendation を生成する。
-16. VS Code CLI で拡張機能を portable extensions dir にインストールする。
-17. `$Root\VSCode.cmd`、`$Root\Cygwin.cmd`、`$Root\PowerShell.cmd` を生成する。
-18. pip と npm の追加パッケージをインストールする。
-19. 各ツールの shim または実体パスが存在し、バージョンコマンドが実行できることを検証する。
+12. 固定 CLI 用の cmd shim を `.local\bin` に生成する。
+13. 現プロセスの PATH に `.local\bin` と必要な `.local\opt` 配下の実体ディレクトリを追加し、キャッシュ関連環境変数を構成する。
+14. VS Code settings と extensions recommendation を生成する。
+15. VS Code CLI で拡張機能を portable extensions dir にインストールする。
+16. `$Root\VSCode.cmd`、`$Root\PowerShell.cmd` を生成する。
+17. pip と npm の追加パッケージをインストールする。
+18. 各ツールの shim または実体パスが存在し、バージョンコマンドが実行できることを検証する。
 
 ## 7. 🐍 pip 要件
 
@@ -220,7 +227,8 @@ PowerShell スクリプトは以下を実行する。
 - `settings.json` は `$Root\.local\opt\vscode\data\user-data\User\settings.json` に生成する。
 - `extensions.json` は `$Root\.local\opt\vscode\data\user-data\User\extensions.json` に生成する。
 - integrated terminal の既定プロファイルは `PowerShell-Portable` とする。
-- integrated terminal から `Cygwin` プロファイルを選べるようにする。
+- `setup.ps1` だけでは Cygwin profile は作成しない。
+- `setup_cygwin.ps1` 実行時に既存の VS Code portable settings があれば、integrated terminal に `Cygwin` プロファイルを追記する。
 - `workbench.colorTheme` は `Visual Studio Dark` とする。
 - `window.commandCenter` は無効化する。
 - `chat.titleBar.signIn.enabled` は無効化する。
@@ -233,11 +241,11 @@ PowerShell スクリプトは以下を実行する。
 - `ZooCodeOrganization.zoo-code`
 - `zhuangtongfa.Material-theme`
 - `openai.chatgpt`
-- `anthropic.claude-code`
+- `pkief.material-icon-theme`
 
-## 11. 🐚 Cygwin 要件
+## 11. 🐚 Optional Cygwin 要件
 
-Cygwin は公式 `setup-x86_64.exe` を使ってインストールする。Cygwin は rolling distribution のため、任意の過去バージョン固定は保証しない。
+Cygwin は `setup.ps1` から分離し、`setup_cygwin.ps1` で追加インストールする。公式 `setup-x86_64.exe` を使い、Cygwin は rolling distribution のため、任意の過去バージョン固定は保証しない。
 
 Cygwin mirror は以下の国内候補から疎通できるものを選択する。
 
@@ -259,9 +267,11 @@ Cygwin setup は以下の引数で実行する。
 
 setup の `net-method` は `IE5` に設定し、システムのプロキシ設定を使う。
 
+`setup_cygwin.ps1` はインストール後に `$Root\Cygwin.cmd` を生成する。VS Code portable settings が存在する場合は、`terminal.integrated.profiles.windows` に `Cygwin` profile を追加する。
+
 ## 12. 🚀 起動コマンド要件
 
-PowerShell スクリプト内で `$Root\VSCode.cmd`、`$Root\Cygwin.cmd`、`$Root\PowerShell.cmd` を作成する。
+`setup.ps1` は `$Root\VSCode.cmd` と `$Root\PowerShell.cmd` を作成する。`setup_cygwin.ps1` は `$Root\Cygwin.cmd` を作成する。
 
 ### 12.1 `VSCode.cmd`
 
@@ -273,17 +283,18 @@ PowerShell スクリプト内で `$Root\VSCode.cmd`、`$Root\Cygwin.cmd`、`$Roo
 - `--disable-gpu` と `--no-sandbox` を指定する。
 - 起動後は `exit /b 0` で終了する。
 
-### 12.2 `Cygwin.cmd`
-
-- `$Root\.local\opt\cygwin\bin` に移動する。
-- `bash --login -i` を起動する。
-
-### 12.3 `PowerShell.cmd`
+### 12.2 `PowerShell.cmd`
 
 - ランチャー内で PATH に `.local\bin` と必要な `.local\opt` 配下の実体ディレクトリを追加し、キャッシュ関連環境変数をポータブル環境向けに設定する。
 - Windows PowerShell を起動する。
 
 インストール完了後、VS Code は自動起動しない。ログに各ランチャーのパスを表示する。
+
+### 12.3 `Cygwin.cmd`
+
+- `setup_cygwin.ps1` が生成する。
+- `$Root\.local\opt\cygwin\bin` に移動する。
+- `bash --login -i` を起動する。
 
 ## 13. 🪟 Windows Terminal 連携
 
