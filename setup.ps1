@@ -489,9 +489,16 @@ function Install-UvZip {
   )
   Write-Log "Installing uv $Version to: $Destination" 'STEP'
   if ($Version -in @('latest','stable')) {
-    $asset = Get-GitHubReleaseAsset -Repo 'astral-sh/uv' -AssetPattern '^uv-x86_64-pc-windows-msvc\.zip$'
-    if ($null -eq $asset) { throw 'Could not find the latest uv Windows x64 release asset.' }
-    $zip = Download-FileCached $asset.Url "uv-$($asset.Tag)-$($asset.Name)"
+    $assetPattern = '^uv-x86_64-pc-windows-msvc\.zip$'
+    $cached = Get-CachedGitHubReleaseAsset -Name 'uv' -AssetPattern $assetPattern
+    if ($null -ne $cached) {
+      Write-Log "Using cached release asset for uv: $($cached.Name)" 'OK'
+      $zip = $cached.Path
+    } else {
+      $asset = Get-GitHubReleaseAsset -Repo 'astral-sh/uv' -AssetPattern $assetPattern
+      if ($null -eq $asset) { throw 'Could not find the latest uv Windows x64 release asset.' }
+      $zip = Download-FileCached $asset.Url "uv-$($asset.Tag)-$($asset.Name)"
+    }
     Expand-ZipClean $zip $Destination
     return
   }
@@ -517,9 +524,16 @@ function Install-JqExe {
   Write-Log "Installing jq $Version to: $Destination" 'STEP'
   New-Directory $Destination
   if ($Version -in @('latest','stable')) {
-    $asset = Get-GitHubReleaseAsset -Repo 'jqlang/jq' -AssetPattern '^jq-windows-amd64\.exe$'
-    if ($null -eq $asset) { throw 'Could not find the latest jq Windows x64 release asset.' }
-    $exe = Download-FileCached $asset.Url "jq-$($asset.Tag)-$($asset.Name)"
+    $assetPattern = '^jq-windows-amd64\.exe$'
+    $cached = Get-CachedGitHubReleaseAsset -Name 'jq' -AssetPattern $assetPattern
+    if ($null -ne $cached) {
+      Write-Log "Using cached release asset for jq: $($cached.Name)" 'OK'
+      $exe = $cached.Path
+    } else {
+      $asset = Get-GitHubReleaseAsset -Repo 'jqlang/jq' -AssetPattern $assetPattern
+      if ($null -eq $asset) { throw 'Could not find the latest jq Windows x64 release asset.' }
+      $exe = Download-FileCached $asset.Url "jq-$($asset.Tag)-$($asset.Name)"
+    }
     Copy-Item -LiteralPath $exe -Destination (Join-Path $Destination 'jq.exe') -Force
     return
   }
@@ -543,9 +557,16 @@ function Install-PandocZip {
   )
   Write-Log "Installing pandoc $Version to: $Destination" 'STEP'
   if ($Version -in @('latest','stable')) {
-    $asset = Get-GitHubReleaseAsset -Repo 'jgm/pandoc' -AssetPattern '^pandoc-[0-9][^-]*-windows-x86_64\.zip$'
-    if ($null -eq $asset) { throw 'Could not find the latest pandoc Windows x64 release asset.' }
-    $zip = Download-FileCached $asset.Url "pandoc-$($asset.Tag)-$($asset.Name)"
+    $assetPattern = '^pandoc-[0-9][^-]*-windows-x86_64\.zip$'
+    $cached = Get-CachedGitHubReleaseAsset -Name 'pandoc' -AssetPattern $assetPattern
+    if ($null -ne $cached) {
+      Write-Log "Using cached release asset for pandoc: $($cached.Name)" 'OK'
+      $zip = $cached.Path
+    } else {
+      $asset = Get-GitHubReleaseAsset -Repo 'jgm/pandoc' -AssetPattern $assetPattern
+      if ($null -eq $asset) { throw 'Could not find the latest pandoc Windows x64 release asset.' }
+      $zip = Download-FileCached $asset.Url "pandoc-$($asset.Tag)-$($asset.Name)"
+    }
     Expand-ZipClean $zip $Destination
     return
   }
