@@ -22,7 +22,7 @@ The standard bootstrap SHALL maintain explicit defaults for versioned tools.
 - **WHEN** `setup.ps1` runs with defaults
 - **THEN** Python defaults to `3.12.10`
 - **AND** Node.js defaults to `24.16.0`
-- **AND** uv defaults to `0.11.25`
+- **AND** uv defaults to `0.11.26`
 - **AND** jq defaults to `1.8.2`
 - **AND** pandoc defaults to `3.10`
 - **AND** VS Code defaults to `stable`

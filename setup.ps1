@@ -7,7 +7,7 @@ param(
 
   [string]$NodejsVersion = '24.16.0',
 
-  [string]$UvVersion = '0.11.25',
+  [string]$UvVersion = '0.11.26',
 
   [string]$JqVersion = '1.8.2',
 
