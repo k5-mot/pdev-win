@@ -7,11 +7,11 @@ param(
 
   [string]$NodejsVersion = '24.16.0',
 
-  [string]$UvVersion = 'latest',
+  [string]$UvVersion = '0.11.25',
 
-  [string]$JqVersion = 'latest',
+  [string]$JqVersion = '1.8.2',
 
-  [string]$PandocVersion = 'latest',
+  [string]$PandocVersion = '3.10',
 
   [string]$VSCodeVersion = 'stable',
 
@@ -68,24 +68,23 @@ $VSCodeExtensions = @(
   'zhuangtongfa.Material-theme',
   'pkief.material-icon-theme'
 )
-$DefaultPortableToolManifestJson = @'
-[
-  {"name":"bat","repo":"sharkdp/bat","assetPattern":"^bat-v?[0-9.]+-x86_64-pc-windows-msvc\\.zip$","exeName":"bat.exe","shimName":"bat.cmd","versionArgs":["--version"]},
-  {"name":"bottom","repo":"ClementTsang/bottom","assetPattern":"^bottom_x86_64-pc-windows-msvc\\.zip$","exeName":"btm.exe","shimName":"btm.cmd","versionArgs":["--version"]},
-  {"name":"crane","repo":"google/go-containerregistry","assetPattern":"^go-containerregistry_Windows_x86_64\\.tar\\.gz$","exeName":"crane.exe","shimName":"crane.cmd","versionArgs":["version"]},
-  {"name":"delta","repo":"dandavison/delta","assetPattern":"^delta-[0-9.]+-x86_64-pc-windows-msvc\\.zip$","exeName":"delta.exe","shimName":"delta.cmd","versionArgs":["--version"]},
-  {"name":"dust","repo":"bootandy/dust","assetPattern":"^dust-v?[0-9.]+-x86_64-pc-windows-msvc\\.zip$","exeName":"dust.exe","shimName":"dust.cmd","versionArgs":["--version"]},
-  {"name":"fd","repo":"sharkdp/fd","assetPattern":"^fd-v?[0-9.]+-x86_64-pc-windows-msvc\\.zip$","exeName":"fd.exe","shimName":"fd.cmd","versionArgs":["--version"]},
-  {"name":"hyperfine","repo":"sharkdp/hyperfine","assetPattern":"^hyperfine-v?[0-9.]+-x86_64-pc-windows-msvc\\.zip$","exeName":"hyperfine.exe","shimName":"hyperfine.cmd","versionArgs":["--version"]},
-  {"name":"ripgrep","repo":"BurntSushi/ripgrep","assetPattern":"^ripgrep-[0-9.]+-x86_64-pc-windows-msvc\\.zip$","exeName":"rg.exe","shimName":"rg.cmd","versionArgs":["--version"]},
-  {"name":"zoxide","repo":"ajeetdsouza/zoxide","assetPattern":"^zoxide-v?[0-9.]+-x86_64-pc-windows-msvc\\.zip$","exeName":"zoxide.exe","shimName":"zoxide.cmd","versionArgs":["--version"]},
-  {"name":"lsd","repo":"lsd-rs/lsd","assetPattern":"^lsd-v?[0-9.]+-x86_64-pc-windows-msvc\\.zip$","exeName":"lsd.exe","shimName":"lsd.cmd","versionArgs":["--version"]},
-  {"name":"broot","repo":"Canop/broot","assetPattern":"^broot_.*\\.zip$","exeName":"broot.exe","shimName":"broot.cmd","versionArgs":["--version"]},
-  {"name":"xh","repo":"ducaale/xh","assetPattern":"^xh-v?[0-9.]+-x86_64-pc-windows-msvc\\.zip$","exeName":"xh.exe","shimName":"xh.cmd","versionArgs":["--version"]},
-  {"name":"sd","repo":"chmln/sd","assetPattern":"^sd-v?[0-9.]+-x86_64-pc-windows-msvc\\.zip$","exeName":"sd.exe","shimName":"sd.cmd","versionArgs":["--version"]},
-  {"name":"choose","repo":"theryangeary/choose","assetPattern":"^choose-x86_64-pc-windows-gnu(?:\\.exe)?$","exeName":"choose.exe","shimName":"choose.cmd","versionArgs":["--version"]}
-]
-'@
+$DefaultPortableTools = @(
+  [ordered]@{ name='crane'; repo='google/go-containerregistry'; tag='v0.21.7'; assetName='go-containerregistry_Windows_x86_64.tar.gz'; exeName='crane.exe'; shimName='crane.cmd'; versionArgs=@('version') },
+  [ordered]@{ name='bat'; repo='sharkdp/bat'; tag='v0.26.1'; assetName='bat-v0.26.1-x86_64-pc-windows-msvc.zip'; exeName='bat.exe'; shimName='bat.cmd'; versionArgs=@('--version') },
+  [ordered]@{ name='bottom'; repo='ClementTsang/bottom'; tag='0.14.2'; assetName='bottom_x86_64-pc-windows-msvc.zip'; exeName='btm.exe'; shimName='btm.cmd'; versionArgs=@('--version') },
+  [ordered]@{ name='delta'; repo='dandavison/delta'; tag='0.19.2'; assetName='delta-0.19.2-x86_64-pc-windows-msvc.zip'; exeName='delta.exe'; shimName='delta.cmd'; versionArgs=@('--version') },
+  [ordered]@{ name='dust'; repo='bootandy/dust'; tag='v1.2.4'; assetName='dust-v1.2.4-x86_64-pc-windows-msvc.zip'; exeName='dust.exe'; shimName='dust.cmd'; versionArgs=@('--version') },
+  [ordered]@{ name='fd'; repo='sharkdp/fd'; tag='v10.4.2'; assetName='fd-v10.4.2-x86_64-pc-windows-msvc.zip'; exeName='fd.exe'; shimName='fd.cmd'; versionArgs=@('--version') },
+  [ordered]@{ name='hyperfine'; repo='sharkdp/hyperfine'; tag='v1.20.0'; assetName='hyperfine-v1.20.0-x86_64-pc-windows-msvc.zip'; exeName='hyperfine.exe'; shimName='hyperfine.cmd'; versionArgs=@('--version') },
+  [ordered]@{ name='ripgrep'; repo='BurntSushi/ripgrep'; tag='15.1.0'; assetName='ripgrep-15.1.0-x86_64-pc-windows-msvc.zip'; exeName='rg.exe'; shimName='rg.cmd'; versionArgs=@('--version') },
+  [ordered]@{ name='zoxide'; repo='ajeetdsouza/zoxide'; tag='v0.9.9'; assetName='zoxide-0.9.9-x86_64-pc-windows-msvc.zip'; exeName='zoxide.exe'; shimName='zoxide.cmd'; versionArgs=@('--version') },
+  [ordered]@{ name='lsd'; repo='lsd-rs/lsd'; tag='v1.2.0'; assetName='lsd-v1.2.0-x86_64-pc-windows-msvc.zip'; exeName='lsd.exe'; shimName='lsd.cmd'; versionArgs=@('--version') },
+  [ordered]@{ name='broot'; repo='Canop/broot'; tag='v1.57.0'; assetName='broot_1.57.0.zip'; exeName='x86_64-pc-windows-gnu/broot.exe'; shimName='broot.cmd'; versionArgs=@('--version') },
+  [ordered]@{ name='xh'; repo='ducaale/xh'; tag='v0.26.1'; assetName='xh-v0.26.1-x86_64-pc-windows-msvc.zip'; exeName='xh.exe'; shimName='xh.cmd'; versionArgs=@('--version') },
+  [ordered]@{ name='sd'; repo='chmln/sd'; tag='v1.1.0'; assetName='sd-v1.1.0-x86_64-pc-windows-msvc.zip'; exeName='sd.exe'; shimName='sd.cmd'; versionArgs=@('--version') },
+  [ordered]@{ name='choose'; repo='theryangeary/choose'; tag='v1.3.7'; assetName='choose-x86_64-pc-windows-gnu.exe'; exeName='choose.exe'; shimName='choose.cmd'; versionArgs=@('--version') },
+  [ordered]@{ name='genact'; repo='svenstaro/genact'; tag='v1.5.1'; assetName='genact-1.5.1-x86_64-pc-windows-msvc.exe'; exeName='genact.exe'; shimName='genact.cmd'; versionArgs=@('--version') }
+)
 
 <#
 .SYNOPSIS
@@ -488,20 +487,7 @@ function Install-UvZip {
     [Parameter(Mandatory)][string]$Version
   )
   Write-Log "Installing uv $Version to: $Destination" 'STEP'
-  if ($Version -in @('latest','stable')) {
-    $assetPattern = '^uv-x86_64-pc-windows-msvc\.zip$'
-    $cached = Get-CachedGitHubReleaseAsset -Name 'uv' -AssetPattern $assetPattern
-    if ($null -ne $cached) {
-      Write-Log "Using cached release asset for uv: $($cached.Name)" 'OK'
-      $zip = $cached.Path
-    } else {
-      $asset = Get-GitHubReleaseAsset -Repo 'astral-sh/uv' -AssetPattern $assetPattern
-      if ($null -eq $asset) { throw 'Could not find the latest uv Windows x64 release asset.' }
-      $zip = Download-FileCached $asset.Url "uv-$($asset.Tag)-$($asset.Name)"
-    }
-    Expand-ZipClean $zip $Destination
-    return
-  }
+  if ($Version -in @('latest','stable')) { throw 'UvVersion must be a fixed version, not latest or stable.' }
   $versionTag = $Version.TrimStart('v')
   $url = "https://releases.astral.sh/github/uv/releases/download/$versionTag/uv-x86_64-pc-windows-msvc.zip"
   $zip = Download-FileCached $url "uv-$versionTag-x86_64-pc-windows-msvc.zip"
@@ -523,22 +509,10 @@ function Install-JqExe {
   )
   Write-Log "Installing jq $Version to: $Destination" 'STEP'
   New-Directory $Destination
-  if ($Version -in @('latest','stable')) {
-    $assetPattern = '^jq-windows-amd64\.exe$'
-    $cached = Get-CachedGitHubReleaseAsset -Name 'jq' -AssetPattern $assetPattern
-    if ($null -ne $cached) {
-      Write-Log "Using cached release asset for jq: $($cached.Name)" 'OK'
-      $exe = $cached.Path
-    } else {
-      $asset = Get-GitHubReleaseAsset -Repo 'jqlang/jq' -AssetPattern $assetPattern
-      if ($null -eq $asset) { throw 'Could not find the latest jq Windows x64 release asset.' }
-      $exe = Download-FileCached $asset.Url "jq-$($asset.Tag)-$($asset.Name)"
-    }
-    Copy-Item -LiteralPath $exe -Destination (Join-Path $Destination 'jq.exe') -Force
-    return
-  }
+  if ($Version -in @('latest','stable')) { throw 'JqVersion must be a fixed version, not latest or stable.' }
   $tag = if ($Version.StartsWith('jq-')) { $Version } else { "jq-$Version" }
-  $exe = Download-FileCached "https://github.com/jqlang/jq/releases/download/$tag/jq-windows-amd64.exe" "jq-$Version-windows-amd64.exe"
+  $versionLabel = $tag.Substring(3)
+  $exe = Download-FileCached "https://github.com/jqlang/jq/releases/download/$tag/jq-windows-amd64.exe" "jq-$versionLabel-windows-amd64.exe"
   Copy-Item -LiteralPath $exe -Destination (Join-Path $Destination 'jq.exe') -Force
 }
 
@@ -556,129 +530,10 @@ function Install-PandocZip {
     [Parameter(Mandatory)][string]$Version
   )
   Write-Log "Installing pandoc $Version to: $Destination" 'STEP'
-  if ($Version -in @('latest','stable')) {
-    $assetPattern = '^pandoc-[0-9][^-]*-windows-x86_64\.zip$'
-    $cached = Get-CachedGitHubReleaseAsset -Name 'pandoc' -AssetPattern $assetPattern
-    if ($null -ne $cached) {
-      Write-Log "Using cached release asset for pandoc: $($cached.Name)" 'OK'
-      $zip = $cached.Path
-    } else {
-      $asset = Get-GitHubReleaseAsset -Repo 'jgm/pandoc' -AssetPattern $assetPattern
-      if ($null -eq $asset) { throw 'Could not find the latest pandoc Windows x64 release asset.' }
-      $zip = Download-FileCached $asset.Url "pandoc-$($asset.Tag)-$($asset.Name)"
-    }
-    Expand-ZipClean $zip $Destination
-    return
-  }
+  if ($Version -in @('latest','stable')) { throw 'PandocVersion must be a fixed version, not latest or stable.' }
   $url = "https://github.com/jgm/pandoc/releases/download/$Version/pandoc-$Version-windows-x86_64.zip"
   $zip = Download-FileCached $url "pandoc-$Version-windows-x86_64.zip"
   Expand-ZipClean $zip $Destination
-}
-
-<#
-.SYNOPSIS
-GitHub Releases から条件に合う asset を取得します。
-.PARAMETER Repo
-owner/name 形式の GitHub repository 名です。
-.PARAMETER AssetPattern
-対象 asset 名を判定する正規表現です。
-#>
-function Get-GitHubReleaseAsset {
-    param(
-    [Parameter(Mandatory)][string]$Repo,
-    [Parameter(Mandatory)][string]$AssetPattern
-  )
-
-  $headers = @{}
-  if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
-    $headers.Authorization = "Bearer $env:GITHUB_TOKEN"
-  }
-
-  $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases" -Headers $headers -UseBasicParsing
-  foreach ($release in $releases) {
-    if ($release.draft -or $release.prerelease) { continue }
-    $asset = @($release.assets | Where-Object { $_.name -match $AssetPattern } | Select-Object -First 1)
-    if ($asset.Count -gt 0) {
-      return [pscustomobject]@{
-        Tag = $release.tag_name
-        Name = $asset[0].name
-        Url = $asset[0].browser_download_url
-      }
-    }
-  }
-
-  return $null
-}
-
-<#
-.SYNOPSIS
-.local/pkg にある GitHub Releases asset のキャッシュを取得します。
-.PARAMETER Name
-ツール名です。
-.PARAMETER AssetPattern
-対象 asset 名を判定する正規表現です。
-#>
-function Get-CachedGitHubReleaseAsset {
-    param(
-    [Parameter(Mandatory)][string]$Name,
-    [Parameter(Mandatory)][string]$AssetPattern
-  )
-
-  if ($script:InstallForce -or (-not (Test-Path -LiteralPath $PkgDir))) {
-    return $null
-  }
-
-  $files = @(Get-ChildItem -LiteralPath $PkgDir -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc -Descending)
-  foreach ($file in $files) {
-    $assetName = $null
-    $tag = $null
-
-    if ($file.Name -match $AssetPattern) {
-      $assetName = $file.Name
-    } elseif ($file.Name.StartsWith("$Name-", [StringComparison]::OrdinalIgnoreCase)) {
-      $suffix = $file.Name.Substring($Name.Length + 1)
-      for ($i = 0; $i -lt $suffix.Length; $i++) {
-        if ($suffix[$i] -ne '-') { continue }
-        if ($i -ge ($suffix.Length - 1)) { continue }
-
-        $candidate = $suffix.Substring($i + 1)
-        if ($candidate -match $AssetPattern) {
-          $tag = $suffix.Substring(0, $i)
-          $assetName = $candidate
-          break
-        }
-      }
-    }
-
-    if ($null -ne $assetName) {
-      return [pscustomobject]@{
-        Tag = $tag
-        Name = $assetName
-        Path = $file.FullName
-      }
-    }
-  }
-
-  return $null
-}
-
-<#
-.SYNOPSIS
-portable CLI tool manifest を読み込みます。
-#>
-function Get-PortableToolManifest {
-  $manifestPath = $null
-  if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
-    $manifestPath = Join-Path $PSScriptRoot 'config/portable-tools.json'
-  }
-
-  if ($null -ne $manifestPath -and (Test-Path -LiteralPath $manifestPath)) {
-    Write-Log "Loading portable tool manifest: $manifestPath" 'INFO'
-    return @(Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json)
-  }
-
-  Write-Log 'Using embedded portable tool manifest.' 'WARN'
-  return @($DefaultPortableToolManifestJson | ConvertFrom-Json)
 }
 
 <#
@@ -688,8 +543,10 @@ GitHub Releases の portable asset をダウンロードして配置します。
 ツール名です。
 .PARAMETER Repo
 owner/name 形式の GitHub repository 名です。
-.PARAMETER AssetPattern
-対象 asset 名を判定する正規表現です。
+.PARAMETER Tag
+ダウンロード対象の release tag です。
+.PARAMETER AssetName
+ダウンロード対象の asset 名です。
 .PARAMETER Destination
 インストール先ディレクトリです。
 .PARAMETER ExeName
@@ -699,47 +556,36 @@ function Install-GitHubPortableTool {
     param(
     [Parameter(Mandatory)][string]$Name,
     [Parameter(Mandatory)][string]$Repo,
-    [Parameter(Mandatory)][string]$AssetPattern,
+    [Parameter(Mandatory)][string]$Tag,
+    [Parameter(Mandatory)][string]$AssetName,
     [Parameter(Mandatory)][string]$Destination,
     [Parameter(Mandatory)][string]$ExeName
   )
 
   Write-Log "Installing $Name from GitHub Releases to: $Destination" 'STEP'
-  $asset = Get-CachedGitHubReleaseAsset -Name $Name -AssetPattern $AssetPattern
-  if ($null -ne $asset) {
-    Write-Log "Using cached release asset for ${Name}: $($asset.Name)" 'OK'
-    $download = $asset.Path
-  } else {
-    $asset = Get-GitHubReleaseAsset -Repo $Repo -AssetPattern $AssetPattern
-    if ($null -eq $asset) {
-      $reason = "no portable Windows x64 release asset matched '$AssetPattern' in $Repo"
-      Write-Log "$Name was skipped: $reason." 'WARN'
-      return [pscustomobject]@{ Name=$Name; Success=$false; Reason=$reason }
-    }
+  Write-Log "$Name release asset: $Tag / $AssetName" 'INFO'
+  $url = "https://github.com/$Repo/releases/download/$Tag/$AssetName"
+  $cacheName = "$Name-$Tag-$AssetName"
+  $download = Download-FileCached $url $cacheName
 
-    Write-Log "$Name release asset: $($asset.Tag) / $($asset.Name)" 'INFO'
-    $cacheName = "$Name-$($asset.Tag)-$($asset.Name)"
-    $download = Download-FileCached $asset.Url $cacheName
-  }
-
-  if ($asset.Name.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase) -or
-      (-not ($asset.Name -match '\.(zip|tar\.gz)$'))) {
+  if ($AssetName.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase) -or
+      (-not ($AssetName -match '\.(zip|tar\.gz)$'))) {
     New-Directory $Destination
     Copy-Item -LiteralPath $download -Destination (Join-Path $Destination $ExeName) -Force
     return [pscustomobject]@{ Name=$Name; Success=$true; Reason='' }
   }
 
-  if ($asset.Name.EndsWith('.zip', [StringComparison]::OrdinalIgnoreCase)) {
+  if ($AssetName.EndsWith('.zip', [StringComparison]::OrdinalIgnoreCase)) {
     Expand-ZipClean $download $Destination
     return [pscustomobject]@{ Name=$Name; Success=$true; Reason='' }
   }
 
-  if ($asset.Name.EndsWith('.tar.gz', [StringComparison]::OrdinalIgnoreCase)) {
+  if ($AssetName.EndsWith('.tar.gz', [StringComparison]::OrdinalIgnoreCase)) {
     Expand-TarGzClean $download $Destination
     return [pscustomobject]@{ Name=$Name; Success=$true; Reason='' }
   }
 
-  $reason = "asset '$($asset.Name)' is not a supported portable .zip, .tar.gz, or .exe"
+  $reason = "asset '$AssetName' is not a supported portable .zip, .tar.gz, or .exe"
   Write-Log "$Name was skipped: $reason." 'WARN'
   return [pscustomobject]@{ Name=$Name; Success=$false; Reason=$reason }
 }
@@ -764,7 +610,8 @@ function Install-PortableCliTools {
       $result = Install-GitHubPortableTool `
         -Name $tool.name `
         -Repo $tool.repo `
-        -AssetPattern $tool.assetPattern `
+        -Tag $tool.tag `
+        -AssetName $tool.assetName `
         -Destination $Destinations[$tool.name] `
         -ExeName $tool.exeName
       if (-not $result.Success) {
@@ -1100,7 +947,7 @@ try {
   $JqDir     = Join-Path $OptDir 'jq'
   $PandocDir = Join-Path $OptDir 'pandoc'
   $VSCodeDir = Join-Path $OptDir 'vscode'
-  $PortableTools = Get-PortableToolManifest
+  $PortableTools = @($DefaultPortableTools)
   $PortableToolDirs = @{}
   foreach ($tool in $PortableTools) {
     $PortableToolDirs[$tool.name] = Join-Path $OptDir $tool.name
