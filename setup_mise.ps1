@@ -7,11 +7,11 @@ param(
 
   [string]$NodejsVersion = '24.16.0',
 
-  [string]$UvVersion = 'latest',
+  [string]$UvVersion = '0.11.25',
 
-  [string]$JqVersion = 'latest',
+  [string]$JqVersion = '1.8.2',
 
-  [string]$PandocVersion = 'latest',
+  [string]$PandocVersion = '3.10',
 
   [string]$VSCodeVersion = 'stable',
 
@@ -39,20 +39,20 @@ if ([string]::IsNullOrWhiteSpace($Root)) {
 $Root = [IO.Path]::GetFullPath($Root)
 $PkgDir = Join-Path $Root '.local/pkg'
 $OptDir = Join-Path $Root '.local/opt'
-$BinDir = Join-Path $Root '.local/bin'
 $ConfigDir = Join-Path $Root '.config'
 $LogDir = Join-Path $Root '.local/logs'
 $TmpDir = Join-Path $Root '.local/tmp'
 $LogFile = Join-Path $LogDir ('install-mise-{0:yyyyMMdd-HHmmss-fffffff}-{1}.log' -f (Get-Date), $PID)
 
-$MiseVersion = 'latest'
+$MiseVersion = 'v2026.6.14'
+$MiseAssetName = "mise-$MiseVersion-windows-x64.exe"
 $MiseDir = Join-Path $OptDir 'mise'
 $MiseExe = Join-Path $MiseDir 'mise.exe'
-$MiseToml = Join-Path $Root 'mise.toml'
 $MiseDataDir = Join-Path $Root '.local/share/mise'
 $MiseCacheDir = Join-Path $Root '.local/pkg/mise-cache'
 $MiseStateDir = Join-Path $Root '.local/state/mise'
 $MiseConfigDir = Join-Path $Root '.config/mise'
+$MiseConfigFile = Join-Path $MiseConfigDir 'config.toml'
 $MiseShimsDir = Join-Path $MiseDataDir 'shims'
 $NpmGlobalDir = Join-Path $Root '.local/opt/npm-global'
 
@@ -68,21 +68,22 @@ $MiseTools = @(
   [ordered]@{ Id='node'; Version=$NodejsVersion; Commands=@(@{ Name='node'; Args=@('--version') }, @{ Name='npm'; Args=@('--version') }) },
   [ordered]@{ Id='uv'; Version=$UvVersion; Commands=@(@{ Name='uv'; Args=@('--version') }) },
   [ordered]@{ Id='jq'; Version=$JqVersion; Commands=@(@{ Name='jq'; Args=@('--version') }) },
-  [ordered]@{ Id='pandoc'; Version=$PandocVersion; Commands=@(@{ Name='pandoc'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:google/go-containerregistry'; Version='latest'; Commands=@(@{ Name='crane'; Args=@('version') }) },
-  [ordered]@{ Id='aqua:BurntSushi/ripgrep'; Version='latest'; Commands=@(@{ Name='rg'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:sharkdp/bat'; Version='latest'; Commands=@(@{ Name='bat'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:sharkdp/fd'; Version='latest'; Commands=@(@{ Name='fd'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:ajeetdsouza/zoxide'; Version='latest'; Commands=@(@{ Name='zoxide'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:dandavison/delta'; Version='latest'; Commands=@(@{ Name='delta'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:sharkdp/hyperfine'; Version='latest'; Commands=@(@{ Name='hyperfine'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:lsd-rs/lsd'; Version='latest'; Commands=@(@{ Name='lsd'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:ClementTsang/bottom'; Version='latest'; Commands=@(@{ Name='btm'; Args=@('--version') }) },
-  [ordered]@{ Id='github:Canop/broot'; Version='latest'; Commands=@(@{ Name='broot'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:bootandy/dust'; Version='latest'; Commands=@(@{ Name='dust'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:ducaale/xh'; Version='latest'; Commands=@(@{ Name='xh'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:chmln/sd'; Version='latest'; Commands=@(@{ Name='sd'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:theryangeary/choose'; Version='latest'; Commands=@(@{ Name='choose'; Args=@('--version') }) }
+  [ordered]@{ Id='http:pandoc'; Version=$PandocVersion; Repo='jgm/pandoc'; Tag=$PandocVersion; Url="https://github.com/jgm/pandoc/releases/download/$PandocVersion/pandoc-$PandocVersion-windows-x86_64.zip"; Commands=@(@{ Name='pandoc'; Args=@('--version') }) },
+  [ordered]@{ Id='aqua:google/go-containerregistry'; Version='v0.21.7'; Commands=@(@{ Name='crane'; Args=@('version') }) },
+  [ordered]@{ Id='aqua:BurntSushi/ripgrep'; Version='15.1.0'; Commands=@(@{ Name='rg'; Args=@('--version') }) },
+  [ordered]@{ Id='aqua:sharkdp/bat'; Version='v0.26.1'; Commands=@(@{ Name='bat'; Args=@('--version') }) },
+  [ordered]@{ Id='aqua:sharkdp/fd'; Version='v10.4.2'; Commands=@(@{ Name='fd'; Args=@('--version') }) },
+  [ordered]@{ Id='aqua:ajeetdsouza/zoxide'; Version='v0.9.9'; Commands=@(@{ Name='zoxide'; Args=@('--version') }) },
+  [ordered]@{ Id='aqua:dandavison/delta'; Version='0.19.2'; Commands=@(@{ Name='delta'; Args=@('--version') }) },
+  [ordered]@{ Id='aqua:sharkdp/hyperfine'; Version='v1.20.0'; Commands=@(@{ Name='hyperfine'; Args=@('--version') }) },
+  [ordered]@{ Id='aqua:lsd-rs/lsd'; Version='v1.2.0'; Commands=@(@{ Name='lsd'; Args=@('--version') }) },
+  [ordered]@{ Id='aqua:ClementTsang/bottom'; Version='0.14.2'; Commands=@(@{ Name='btm'; Args=@('--version') }) },
+  [ordered]@{ Id='http:broot'; Version='v1.57.0'; Repo='Canop/broot'; Tag='v1.57.0'; Url='https://github.com/Canop/broot/releases/download/v1.57.0/broot_1.57.0.zip'; BinPath='x86_64-pc-windows-gnu'; Commands=@(@{ Name='broot'; Args=@('--version') }) },
+  [ordered]@{ Id='aqua:bootandy/dust'; Version='v1.2.4'; Commands=@(@{ Name='dust'; Args=@('--version') }) },
+  [ordered]@{ Id='aqua:ducaale/xh'; Version='v0.26.1'; Commands=@(@{ Name='xh'; Args=@('--version') }) },
+  [ordered]@{ Id='aqua:chmln/sd'; Version='v1.1.0'; Commands=@(@{ Name='sd'; Args=@('--version') }) },
+  [ordered]@{ Id='aqua:theryangeary/choose'; Version='v1.3.7'; Commands=@(@{ Name='choose'; Args=@('--version') }) },
+  [ordered]@{ Id='aqua:svenstaro/genact'; Version='v1.5.1'; Commands=@(@{ Name='genact'; Args=@('--version') }) }
 )
 
 <#
@@ -264,7 +265,7 @@ function Set-MiseEnvironment {
   $env:MISE_CACHE_DIR = $MiseCacheDir
   $env:MISE_STATE_DIR = $MiseStateDir
   $env:MISE_CONFIG_DIR = $MiseConfigDir
-  $env:MISE_GLOBAL_CONFIG_FILE = Join-Path $MiseConfigDir 'config.toml'
+  $env:MISE_GLOBAL_CONFIG_FILE = $MiseConfigFile
   $env:MISE_TRUSTED_CONFIG_PATHS = $Root
   $env:MISE_YES = '1'
   $env:MISE_JOBS = '4'
@@ -272,72 +273,12 @@ function Set-MiseEnvironment {
   $env:TMP = $TmpDir
   $env:npm_config_cache = Join-Path $PkgDir 'npm-cache'
   $env:npm_config_prefix = $NpmGlobalDir
-  $env:PATH = (@($BinDir,$MiseDir,$NpmGlobalDir) -join ';') + ';' + $env:PATH
+  $env:PATH = (@($MiseShimsDir,$MiseDir,$NpmGlobalDir) -join ';') + ';' + $env:PATH
 }
 
 <#
 .SYNOPSIS
-GitHub Releases を多用する mise 用の認証情報を現在のプロセスへ設定します。
-#>
-function Initialize-GitHubAuth {
-  if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
-    Write-Log 'Using GitHub token from GITHUB_TOKEN.' 'INFO'
-    return
-  }
-
-  $gh = Get-Command 'gh' -ErrorAction SilentlyContinue
-  if ($null -eq $gh) {
-    Write-Log 'GITHUB_TOKEN is not set. GitHub-backed mise tools may hit the unauthenticated rate limit.' 'WARN'
-    return
-  }
-
-  try {
-    $token = (& $gh.Source auth token 2>$null | Select-Object -First 1)
-    if (-not [string]::IsNullOrWhiteSpace($token)) {
-      $env:GITHUB_TOKEN = $token.Trim()
-      Write-Log 'Using GitHub token from gh auth token.' 'INFO'
-      return
-    }
-  } catch {
-  }
-  Write-Log 'Could not get a GitHub token from gh. GitHub-backed mise tools may hit the unauthenticated rate limit.' 'WARN'
-}
-
-<#
-.SYNOPSIS
-GitHub API の残量を確認し、mise 実行前にレート制限の問題を検出します。
-#>
-function Test-GitHubApiBudget {
-  $githubToolCount = @($MiseTools | Where-Object { $_.Id -like 'github:*' -or $_.Id -like 'aqua:*' -or $_.Id -eq 'pandoc' }).Count
-  if ($githubToolCount -eq 0) {
-    return
-  }
-
-  $headers = @{}
-  if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
-    $headers.Authorization = "Bearer $env:GITHUB_TOKEN"
-  }
-
-  try {
-    $rate = Invoke-RestMethod -Uri 'https://api.github.com/rate_limit' -Headers $headers -UseBasicParsing
-    $remaining = [int]$rate.resources.core.remaining
-    $limit = [int]$rate.resources.core.limit
-    $resetLocal = [DateTimeOffset]::FromUnixTimeSeconds([int64]$rate.resources.core.reset).LocalDateTime
-    Write-Log "GitHub API rate limit: $remaining/$limit, reset: $resetLocal" 'INFO'
-    if ($remaining -lt ($githubToolCount * 3)) {
-      throw "GitHub API rate limit is too low for mise GitHub tools. Set GITHUB_TOKEN, then rerun. Reset: $resetLocal"
-    }
-  } catch {
-    if ($_.Exception.Message -like 'GitHub API rate limit is too low*') {
-      throw
-    }
-    Write-Log "Could not check GitHub API rate limit: $($_.Exception.Message)" 'WARN'
-  }
-}
-
-<#
-.SYNOPSIS
-GitHub Releases から mise.exe を取得して配置します。
+GitHub Releases の固定 asset URL から mise.exe を取得して配置します。
 #>
 function Install-Mise {
   New-Directory $MiseDir
@@ -346,47 +287,60 @@ function Install-Mise {
     return
   }
 
-  $headers = @{}
-  if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
-    $headers.Authorization = "Bearer $env:GITHUB_TOKEN"
-  }
-  $releaseUri = if ($MiseVersion -in @('latest','stable')) {
-    'https://api.github.com/repos/jdx/mise/releases/latest'
-  } else {
-    "https://api.github.com/repos/jdx/mise/releases/tags/$MiseVersion"
-  }
-  $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers -UseBasicParsing
-  $asset = @($release.assets | Where-Object { $_.name -match '^mise-.*-windows-x64\.exe$' } | Select-Object -First 1)
-  if ($asset.Count -eq 0) {
-    throw "Could not find mise windows-x64 exe asset in release: $($release.tag_name)"
-  }
-
-  $download = Download-FileCached -Url $asset[0].browser_download_url -FileName $asset[0].name
+  if ($MiseVersion -in @('latest','stable')) { throw 'MiseVersion must be a fixed version, not latest or stable.' }
+  $url = "https://github.com/jdx/mise/releases/download/$MiseVersion/$MiseAssetName"
+  $download = Download-FileCached -Url $url -FileName $MiseAssetName
   Copy-Item -LiteralPath $download -Destination $MiseExe -Force
 }
 
 <#
 .SYNOPSIS
-Root 配下の mise.toml を生成します。
+TOML の基本文字列として安全に出力できる形へ escape します。
 #>
-function Write-MiseToml {
-  $lines = New-Object 'System.Collections.Generic.List[string]'
-  $lines.Add('[tools]') | Out-Null
-  foreach ($tool in $MiseTools) {
-    $lines.Add(('"{0}" = "{1}"' -f $tool.Id, $tool.Version)) | Out-Null
-  }
-  $lines.Add('') | Out-Null
-  $lines.Add('[settings]') | Out-Null
-  $lines.Add('experimental = true') | Out-Null
-  Set-Content -LiteralPath $MiseToml -Value $lines.ToArray() -Encoding UTF8
+function Format-TomlString {
+  param([Parameter(Mandatory)][string]$Value)
+
+  return '"' + ($Value.Replace('\', '\\').Replace('"', '\"')) + '"'
 }
 
 <#
 .SYNOPSIS
-mise.toml に記載した tools をインストールします。
+.config/mise/config.toml を生成します。
+#>
+function Write-MiseConfig {
+  $lines = New-Object 'System.Collections.Generic.List[string]'
+  $lines.Add('[tools]') | Out-Null
+  foreach ($tool in $MiseTools) {
+    $id = Format-TomlString $tool.Id
+    $version = Format-TomlString ([string]$tool.Version)
+    $properties = New-Object 'System.Collections.Generic.List[string]'
+    $properties.Add(('version = {0}' -f $version)) | Out-Null
+    if ($tool.Contains('Url') -and -not [string]::IsNullOrWhiteSpace([string]$tool.Url)) {
+      $url = Format-TomlString ([string]$tool.Url)
+      $properties.Add(('url = {0}' -f $url)) | Out-Null
+    }
+    if ($tool.Contains('BinPath') -and -not [string]::IsNullOrWhiteSpace([string]$tool.BinPath)) {
+      $binPath = Format-TomlString ([string]$tool.BinPath)
+      $properties.Add(('bin_path = {0}' -f $binPath)) | Out-Null
+    }
+    if ($properties.Count -gt 1) {
+      $lines.Add(('{0} = {{ {1} }}' -f $id, ($properties -join ', '))) | Out-Null
+    } else {
+      $lines.Add(('{0} = {1}' -f $id, $version)) | Out-Null
+    }
+  }
+  $lines.Add('') | Out-Null
+  $lines.Add('[settings]') | Out-Null
+  $lines.Add('experimental = true') | Out-Null
+  Set-Content -LiteralPath $MiseConfigFile -Value $lines.ToArray() -Encoding UTF8
+}
+
+<#
+.SYNOPSIS
+.config/mise/config.toml に記載した tools をインストールします。
 #>
 function Install-MiseTools {
-  Invoke-Checked -FilePath $MiseExe -Arguments @('trust', '-y', $MiseToml) -LogOnly
+  Invoke-Checked -FilePath $MiseExe -Arguments @('trust', '-y', $MiseConfigFile) -LogOnly
   Invoke-Checked -FilePath $MiseExe -Arguments @('install', '-v', '-y', '-C', $Root) -LogOnly
 }
 
@@ -402,6 +356,22 @@ function Install-LanguagePackages {
   Write-Log "npm packages installing via mise..." 'STEP' -LogOnly
   New-Directory $NpmGlobalDir
   Invoke-Checked -FilePath $MiseExe -Arguments @('exec', '-C', $Root, '--', 'npm', 'install', '-g', 'npm', 'cowsay') -LogOnly
+}
+
+<#
+.SYNOPSIS
+mise が生成しない pip.cmd だけを mise shims 配下に補います。
+#>
+function Write-PipShim {
+  New-Directory $MiseShimsDir
+  $pipCmd = Join-Path $MiseShimsDir 'pip.cmd'
+  $pip = @"
+@echo off
+setlocal
+python -m pip %*
+exit /b %ERRORLEVEL%
+"@
+  Set-Content -LiteralPath $pipCmd -Value $pip -Encoding ASCII
 }
 
 <#
@@ -625,42 +595,6 @@ endlocal
 
 <#
 .SYNOPSIS
-Windows の mise shim を直接使わず、mise exec 経由で起動する cmd ラッパーを生成します。
-#>
-function Write-MiseCommandWrappers {
-  $commandNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-  foreach ($tool in $MiseTools) {
-    foreach ($command in $tool.Commands) {
-      [void]$commandNames.Add([string]$command.Name)
-    }
-  }
-  foreach ($extra in @('corepack','npx')) {
-    [void]$commandNames.Add($extra)
-  }
-
-  foreach ($commandName in ($commandNames | Sort-Object)) {
-    $wrapperPath = Join-Path $BinDir ($commandName + '.cmd')
-    $wrapper = @"
-@echo off
-setlocal enableextensions
-set "ROOT=$Root"
-set "MISE_DATA_DIR=%ROOT%\.local\share\mise"
-set "MISE_CACHE_DIR=%ROOT%\.local\pkg\mise-cache"
-set "MISE_STATE_DIR=%ROOT%\.local\state\mise"
-set "MISE_CONFIG_DIR=%ROOT%\.config\mise"
-set "MISE_GLOBAL_CONFIG_FILE=%ROOT%\.config\mise\config.toml"
-set "MISE_TRUSTED_CONFIG_PATHS=%ROOT%"
-set "npm_config_cache=%ROOT%\.local\pkg\npm-cache"
-set "npm_config_prefix=%ROOT%\.local\opt\npm-global"
-"%ROOT%\.local\opt\mise\mise.exe" exec -C "%ROOT%" -- $commandName %*
-exit /b %ERRORLEVEL%
-"@
-    Set-Content -LiteralPath $wrapperPath -Value $wrapper -Encoding ASCII
-  }
-}
-
-<#
-.SYNOPSIS
 指定されたコマンドのバージョン出力を確認します。
 .PARAMETER Name
 ログに表示するツール名です。
@@ -688,7 +622,7 @@ function Test-MiseCommand {
 
 try {
   Assert-UnderDesktop $Root
-  foreach ($d in @($Root,$PkgDir,$OptDir,$BinDir,$ConfigDir,$LogDir,$TmpDir,$MiseDataDir,$MiseCacheDir,$MiseStateDir,$MiseConfigDir,$NpmGlobalDir)) {
+  foreach ($d in @($Root,$PkgDir,$OptDir,$ConfigDir,$LogDir,$TmpDir,$MiseDataDir,$MiseCacheDir,$MiseStateDir,$MiseConfigDir,$NpmGlobalDir)) {
     New-Directory $d
     Assert-UnderDesktop $d
   }
@@ -698,20 +632,18 @@ try {
   Write-Log "TEMP/TMP: $TmpDir" 'INFO'
 
   Set-MiseEnvironment
-  Initialize-GitHubAuth
-  Test-GitHubApiBudget
   Install-Mise
-  Write-MiseToml
+  Write-MiseConfig
   Install-MiseTools
   Install-LanguagePackages
-  Write-MiseCommandWrappers
+  Write-PipShim
 
   $VSCodeDir = Join-Path $OptDir 'vscode'
   Assert-UnderDesktop $VSCodeDir
   Install-VSCodeZip -Destination $VSCodeDir -Version $VSCodeVersion
 
   $PowerShellPathEntries = @(
-    $BinDir,
+    $MiseShimsDir,
     $MiseDir,
     $NpmGlobalDir,
     (Join-Path $VSCodeDir 'bin')
@@ -733,7 +665,7 @@ try {
 
   Write-Log "VSCode launcher: $(Join-Path $Root 'VSCode.cmd')" 'STEP'
   Write-Log "PowerShell launcher: $(Join-Path $Root 'PowerShell.cmd')" 'STEP'
-  Write-Log "mise config: $MiseToml" 'STEP'
+  Write-Log "mise config: $MiseConfigFile" 'STEP'
   Write-Log "Installation completed" 'OK'
 } catch {
   Write-Log $_.Exception.Message 'ERROR'
