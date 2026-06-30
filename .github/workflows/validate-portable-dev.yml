@@ -4,12 +4,14 @@ on:
   push:
     paths:
       - "setup.ps1"
+      - "setup_mise.ps1"
       - "setup_cygwin.ps1"
       - "config/**"
       - ".github/workflows/validate-portable-dev.yml"
   pull_request:
     paths:
       - "setup.ps1"
+      - "setup_mise.ps1"
       - "setup_cygwin.ps1"
       - "config/**"
       - ".github/workflows/validate-portable-dev.yml"
@@ -38,6 +40,7 @@ jobs:
 
           New-Item -ItemType Directory -Path $target | Out-Null
           Copy-Item -LiteralPath '.\setup.ps1' -Destination $target -Force
+          Copy-Item -LiteralPath '.\setup_mise.ps1' -Destination $target -Force
           Copy-Item -LiteralPath '.\setup_cygwin.ps1' -Destination $target -Force
           Copy-Item -LiteralPath '.\README.md' -Destination $target -Force
           Copy-Item -LiteralPath '.\config' -Destination $target -Recurse -Force
@@ -56,7 +59,7 @@ jobs:
       - name: Parse bootstrap scripts
         working-directory: ${{ env.PDEV_WORKSPACE }}
         run: |
-          foreach ($script in @('.\setup.ps1', '.\setup_cygwin.ps1')) {
+          foreach ($script in @('.\setup.ps1', '.\setup_mise.ps1', '.\setup_cygwin.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile(

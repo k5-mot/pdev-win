@@ -1,0 +1,41 @@
+name: Check Pinned Tool Versions
+
+on:
+  push:
+    paths:
+      - "setup.ps1"
+      - "setup_mise.ps1"
+      - "scripts/Test-PinnedGitHubReleaseVersions.ps1"
+      - ".github/workflows/check-pinned-versions.yml"
+  pull_request:
+    paths:
+      - "setup.ps1"
+      - "setup_mise.ps1"
+      - "scripts/Test-PinnedGitHubReleaseVersions.ps1"
+      - ".github/workflows/check-pinned-versions.yml"
+  schedule:
+    - cron: "17 20 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Compare pinned versions with GitHub Releases
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check pinned GitHub release versions
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          .\scripts\Test-PinnedGitHubReleaseVersions.ps1
