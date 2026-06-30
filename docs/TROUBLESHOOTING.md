@@ -19,7 +19,7 @@
 
 社内プロキシや証明書設定が必要な場合は、PowerShell から外部 HTTPS にアクセスできる状態にしてから再実行してください。
 
-`setup.ps1` と `setup_mise.ps1` は、GitHub REST API で latest release や asset 一覧を解決せず、スクリプト内に固定した release tag と asset 名から直接ダウンロードします。
+`setup.ps1` は、GitHub REST API で latest release や asset 一覧を解決せず、スクリプト内に固定した release tag と asset 名から直接ダウンロードします。`setup_mise.ps1` も固定バージョンを使いますが、mise/aqua backend が metadata や artifact attestation の確認で GitHub API にアクセスする場合があります。
 
 ## 📦 Cache
 

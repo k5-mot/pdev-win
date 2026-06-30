@@ -74,7 +74,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 `
 
 ## 🧪 Mise Variant
 
-`setup_mise.ps1` は、mise で toolchain を管理する実験的な代替セットアップです。`mise.exe` 本体は固定バージョンの GitHub Releases asset から取得し、`.config/mise/config.toml` に固定バージョンの tools を書き込みます。
+`setup_mise.ps1` は、mise で toolchain を管理する実験的な代替セットアップです。`mise.exe` 本体は固定バージョンの GitHub Releases asset から取得し、`.config/mise/config.toml` に固定バージョンの tools を書き込みます。コマンドは主に `.local/share/mise/shims` から解決し、npm global packages は `.local/opt/npm-global` に入ります。
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_mise.ps1 `

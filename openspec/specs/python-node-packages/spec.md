@@ -31,6 +31,16 @@ The bootstrap SHALL create `Scripts\pip.cmd` that invokes `python -m pip`.
 - **WHEN** `pip` is invoked from the portable environment
 - **THEN** it uses the portable Python interpreter
 
+### Requirement: Mise pip shim
+
+The mise setup variant SHALL provide `pip` through the mise shim path when mise does not generate a pip shim.
+
+#### Scenario: User runs pip in mise setup
+
+- **WHEN** `setup_mise.ps1` completes
+- **THEN** `.local/share/mise/shims/pip.cmd` invokes `python -m pip`
+- **AND** the portable environment resolves `pip` through `.local/share/mise/shims`
+
 ### Requirement: Pip configuration and cache
 
 The bootstrap SHALL generate portable pip configuration and cache settings.
@@ -58,6 +68,12 @@ The bootstrap SHALL direct npm cache and prefix under the portable root.
 
 - **WHEN** setup installs npm packages
 - **THEN** npm cache and prefix do not rely on global user locations
+
+#### Scenario: Mise npm shim is used
+
+- **WHEN** `setup_mise.ps1` completes
+- **THEN** `npm`, `npx`, and `corepack` resolve through mise-generated shims
+- **AND** `npm_config_prefix` points under `.local/opt/npm-global`
 
 ### Requirement: Additional npm packages
 

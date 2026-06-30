@@ -36,7 +36,8 @@ The standard bootstrap SHALL maintain explicit defaults for versioned tools.
 - **WHEN** `setup_mise.ps1` runs
 - **THEN** it installs a fixed `mise` release under `.local/opt/mise`
 - **AND** writes `.config/mise/config.toml` containing fixed versions for the managed tools
-- **AND** does not resolve GitHub Releases through the GitHub REST API
+- **AND** uses mise shims under `.local/share/mise/shims` as the primary command resolution path
+- **AND** keeps npm global installs under a portable npm prefix
 
 ### Requirement: Version tag normalization
 
@@ -77,15 +78,26 @@ The bootstrap SHALL install GitHub Releases based portable CLI tools into `.loca
 - **AND** expands or places the asset under `.local/opt`
 - **AND** creates a shim under `.local/bin` when configured
 
-### Requirement: No GitHub release discovery during setup
+### Requirement: No GitHub release discovery in standard setup
 
-Setup scripts SHALL NOT call the GitHub REST API to discover the latest release or enumerate release assets during installation.
+`setup.ps1` SHALL NOT call the GitHub REST API to discover the latest release or enumerate release assets during installation.
 
 #### Scenario: GitHub-hosted tool is installed
 
-- **WHEN** setup needs a GitHub-hosted release asset
+- **WHEN** `setup.ps1` needs a GitHub-hosted release asset
 - **THEN** the release tag and asset name come from script-defined fixed values
 - **AND** the download uses a direct release asset URL
+
+### Requirement: Mise GitHub access boundary
+
+`setup_mise.ps1` SHALL avoid script-authored GitHub REST API discovery while allowing mise backends to perform their own metadata or attestation checks.
+
+#### Scenario: Mise-managed GitHub-hosted tool is installed
+
+- **WHEN** `setup_mise.ps1` writes the mise config
+- **THEN** tool versions are pinned in the script
+- **AND** script-authored downloads such as `mise`, `http:pandoc`, and `http:broot` use fixed direct release asset URLs
+- **AND** aqua or other mise backends may still contact GitHub APIs as part of backend behavior
 
 ### Requirement: Missing portable tools fail together
 
