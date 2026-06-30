@@ -22,10 +22,21 @@ The standard bootstrap SHALL maintain explicit defaults for versioned tools.
 - **WHEN** `setup.ps1` runs with defaults
 - **THEN** Python defaults to `3.12.10`
 - **AND** Node.js defaults to `24.16.0`
-- **AND** uv defaults to `0.11.18`
-- **AND** jq defaults to `1.8.0`
-- **AND** pandoc defaults to `3.9.0.2`
+- **AND** uv defaults to `0.11.25`
+- **AND** jq defaults to `1.8.2`
+- **AND** pandoc defaults to `3.10`
 - **AND** VS Code defaults to `stable`
+
+### Requirement: Mise setup variant
+
+`setup_mise.ps1` SHALL provide a mise-managed setup variant with fixed tool versions.
+
+#### Scenario: User runs mise setup
+
+- **WHEN** `setup_mise.ps1` runs
+- **THEN** it installs a fixed `mise` release under `.local/opt/mise`
+- **AND** writes `.config/mise/config.toml` containing fixed versions for the managed tools
+- **AND** does not resolve GitHub Releases through the GitHub REST API
 
 ### Requirement: Version tag normalization
 
@@ -57,13 +68,24 @@ The bootstrap SHALL reuse cached downloads unless `Force` is set.
 
 ### Requirement: GitHub portable CLI tools
 
-The bootstrap SHALL install GitHub Releases based portable CLI tools into `.local/opt` and create shims where configured.
+The bootstrap SHALL install GitHub Releases based portable CLI tools into `.local/opt` from fixed release tags and asset names, and create shims where configured.
 
-#### Scenario: GitHub tool asset is resolved
+#### Scenario: GitHub tool asset is downloaded
 
-- **WHEN** a portable CLI tool manifest entry resolves to a Windows x64 asset
-- **THEN** setup downloads and expands or places the asset under `.local/opt`
+- **WHEN** a built-in portable CLI tool entry defines `name`, `repo`, `tag`, `assetName`, `exeName`, `shimName`, and `versionArgs`
+- **THEN** setup downloads the direct asset URL `https://github.com/{repo}/releases/download/{tag}/{assetName}`
+- **AND** expands or places the asset under `.local/opt`
 - **AND** creates a shim under `.local/bin` when configured
+
+### Requirement: No GitHub release discovery during setup
+
+Setup scripts SHALL NOT call the GitHub REST API to discover the latest release or enumerate release assets during installation.
+
+#### Scenario: GitHub-hosted tool is installed
+
+- **WHEN** setup needs a GitHub-hosted release asset
+- **THEN** the release tag and asset name come from script-defined fixed values
+- **AND** the download uses a direct release asset URL
 
 ### Requirement: Missing portable tools fail together
 

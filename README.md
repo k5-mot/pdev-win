@@ -6,21 +6,28 @@
 
 ## 🧩 Installed Tools
 
-- Python / pip
-- Node.js / npm
-- uv
-- jq
-- pandoc
-- bat
-- bottom
-- crane
-- delta
-- dust
-- eza
-- fd
-- hyperfine
-- procs
-- ripgrep
+- Python
+  - pip
+- Node.js
+  - npm
+- uv：Python package/project manager.
+- jq：JSON processor.
+- pandoc：ドキュメント変換ツール.
+- crane：container registry 操作用 CLI. 一部の `docker` / `podman` 操作の代替.
+- bat：ファイルビュワー. `cat` 代替.
+- bottom：システムモニター. `top` 代替.
+- delta：diff ビュワー. `diff` 代替.
+- dust：disk usage ビュワー. `du` 代替.
+- fd：ファイル検索ツール. `find` 代替.
+- hyperfine：コマンド benchmark ツール. `time` 代替.
+- ripgrep：テキスト検索ツール. `grep` 代替.
+- zoxide：ディレクトリ移動ツール. `cd` 代替.
+- lsd：ディレクトリ一覧ツール. `ls` 代替.
+- broot：対話的ディレクトリナビゲーター. `tree` 補助.
+- xh：HTTP client. `curl` 代替.
+- sd：文字列置換ツール. `sed` 代替.
+- choose：column/field selector. `cut` 代替.
+- genact：fake activity generator.
 - Visual Studio Code
 
 Python には `setuptools`、`wheel`、`python-docx`、`pypdf`、`Pillow` も追加します。Node.js には npm global package として `npm` と `cowsay` をインストールします。
@@ -63,6 +70,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -Root "$env:USER
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 `
   -Root "$env:USERPROFILE\Desktop\pdev" `
   -Force
+```
+
+## 🧪 Mise Variant
+
+`setup_mise.ps1` は、mise で toolchain を管理する実験的な代替セットアップです。`mise.exe` 本体は固定バージョンの GitHub Releases asset から取得し、`.config/mise/config.toml` に固定バージョンの tools を書き込みます。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_mise.ps1 `
+  -Root "$env:USERPROFILE\Desktop\pdev"
 ```
 
 ## 🐚 Optional Cygwin
@@ -120,7 +136,7 @@ $Root = Join-Path ([Environment]::GetFolderPath('Desktop')) 'pdev'
 
 ## ✅ Local Validation
 
-GitHub Actions workflow の検証には、マシンにインストールした `actionlint` を使います。
+GitHub Actions workflow の静的検証には、マシンにインストールした `actionlint` を使います。
 
 ```powershell
 # 1. actionlint をマシンへインストールする。
@@ -128,4 +144,11 @@ winget install --id rhysd.actionlint --exact
 
 # 2. workflow を静的検証する。
 actionlint ".github/workflows/validate-portable-dev.yml"
+actionlint ".github/workflows/check-pinned-versions.yml"
+```
+
+固定している GitHub Releases のバージョンが最新かどうかは、CI と同じスクリプトで確認できます。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-PinnedGitHubReleaseVersions.ps1
 ```

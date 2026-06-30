@@ -10,7 +10,7 @@ The standard bootstrap SHALL install a portable development environment under De
 #### Scenario: Standard bootstrap completes
 
 - **WHEN** `setup.ps1` completes successfully
-- **THEN** Python, pip, Node.js, uv, jq, pandoc, bat, bottom, crane, delta, dust, eza, fd, hyperfine, procs, ripgrep, and Visual Studio Code are available from the portable environment
+- **THEN** Python, pip, Node.js, uv, jq, pandoc, bat, bottom, crane, delta, dust, fd, hyperfine, ripgrep, zoxide, lsd, broot, xh, sd, choose, genact, and Visual Studio Code are available from the portable environment
 - **AND** PATH is configured so the installed tools can be used
 - **AND** VS Code and Windows PowerShell can be launched from root-level launchers
 
@@ -55,7 +55,7 @@ The bootstrap SHALL keep binaries, user data, settings, caches, logs, and tempor
 
 ### Requirement: External network access
 
-The standard bootstrap SHALL document and rely on access to GitHub, Python.org, Node.js, PyPI, and the VS Code update endpoint; optional Cygwin setup SHALL document and rely on access to Cygwin mirrors.
+The standard bootstrap SHALL document and rely on access to GitHub Releases direct asset URLs, Python.org, Node.js, PyPI, and the VS Code update endpoint; optional Cygwin setup SHALL document and rely on access to Cygwin mirrors.
 
 #### Scenario: Network access is restricted
 

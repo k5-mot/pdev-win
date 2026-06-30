@@ -20,7 +20,7 @@ Support scripts SHALL be documented as helpers separate from the core bootstrap.
 #### Scenario: Maintainer inspects `scripts/`
 
 - **WHEN** they review support scripts
-- **THEN** Docker/OCI image download, disk inspection, tree display, and Docling remote chunk validation are identifiable as helper responsibilities
+- **THEN** Docker/OCI image download, disk inspection, tree display, Docling remote chunk validation, and pinned GitHub release version validation are identifiable as helper responsibilities
 
 ### Requirement: Agent skill responsibilities
 

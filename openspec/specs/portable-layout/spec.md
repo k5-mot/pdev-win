@@ -1,7 +1,7 @@
 # portable-layout Specification
 
 ## Purpose
-Define the portable root layout, directory ownership rules, shim placement, cache/log/temp locations, Codex config placement, and optional tool manifest behavior.
+Define the portable root layout, directory ownership rules, shim placement, cache/log/temp locations, Codex config placement, and built-in portable tool manifest behavior.
 ## Requirements
 ### Requirement: Portable root layout
 
@@ -71,12 +71,12 @@ The portable root SHALL keep tool bodies, settings, caches, logs, and temporary 
 - **THEN** it copies that content to `$Root\.config\codex`
 - **AND** model provider credentials are handled by that config rather than by launcher scripts
 
-### Requirement: Optional portable tools manifest
+### Requirement: Built-in portable tools manifest
 
-If `config/portable-tools.json` exists, setup SHALL prefer it as the GitHub Releases portable tools manifest.
+`setup.ps1` SHALL use its script-defined GitHub Releases portable tools manifest.
 
-#### Scenario: Manifest is present
+#### Scenario: Manifest entries are used
 
-- **WHEN** `setup.ps1` runs and finds `config/portable-tools.json`
-- **THEN** each entry can define `name`, `repo`, `assetPattern`, `exeName`, `shimName`, and `versionArgs`
-- **AND** setup falls back to its built-in manifest when the file does not exist
+- **WHEN** `setup.ps1` installs portable CLI tools
+- **THEN** each entry defines `name`, `repo`, `tag`, `assetName`, `exeName`, `shimName`, and `versionArgs`
+- **AND** setup does not load `config/portable-tools.json`

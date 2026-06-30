@@ -10,7 +10,7 @@
 
 セットアップ中は以下にアクセスできる必要があります。
 
-- GitHub Releases
+- GitHub Releases direct asset URLs
 - Python.org
 - Node.js
 - PyPI
@@ -18,6 +18,8 @@
 - Cygwin mirror (`setup_cygwin.ps1` 実行時)
 
 社内プロキシや証明書設定が必要な場合は、PowerShell から外部 HTTPS にアクセスできる状態にしてから再実行してください。
+
+`setup.ps1` と `setup_mise.ps1` は、GitHub REST API で latest release や asset 一覧を解決せず、スクリプト内に固定した release tag と asset 名から直接ダウンロードします。
 
 ## 📦 Cache
 
