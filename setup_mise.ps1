@@ -69,21 +69,21 @@ $MiseTools = @(
   [ordered]@{ Id='uv'; Version=$UvVersion; Commands=@(@{ Name='uv'; Args=@('--version') }) },
   [ordered]@{ Id='jq'; Version=$JqVersion; Commands=@(@{ Name='jq'; Args=@('--version') }) },
   [ordered]@{ Id='http:pandoc'; Version=$PandocVersion; Repo='jgm/pandoc'; Tag=$PandocVersion; Url="https://github.com/jgm/pandoc/releases/download/$PandocVersion/pandoc-$PandocVersion-windows-x86_64.zip"; Commands=@(@{ Name='pandoc'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:google/go-containerregistry'; Version='v0.21.7'; Commands=@(@{ Name='crane'; Args=@('version') }) },
-  [ordered]@{ Id='aqua:BurntSushi/ripgrep'; Version='15.1.0'; Commands=@(@{ Name='rg'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:sharkdp/bat'; Version='v0.26.1'; Commands=@(@{ Name='bat'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:sharkdp/fd'; Version='v10.4.2'; Commands=@(@{ Name='fd'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:ajeetdsouza/zoxide'; Version='v0.9.9'; Commands=@(@{ Name='zoxide'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:dandavison/delta'; Version='0.19.2'; Commands=@(@{ Name='delta'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:sharkdp/hyperfine'; Version='v1.20.0'; Commands=@(@{ Name='hyperfine'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:lsd-rs/lsd'; Version='v1.2.0'; Commands=@(@{ Name='lsd'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:ClementTsang/bottom'; Version='0.14.2'; Commands=@(@{ Name='btm'; Args=@('--version') }) },
+  [ordered]@{ Id='http:crane'; Version='v0.21.7'; Url='https://github.com/google/go-containerregistry/releases/download/v0.21.7/go-containerregistry_Windows_x86_64.tar.gz'; Commands=@(@{ Name='crane'; Args=@('version') }) },
+  [ordered]@{ Id='http:rg'; Version='15.1.0'; Url='https://github.com/BurntSushi/ripgrep/releases/download/15.1.0/ripgrep-15.1.0-x86_64-pc-windows-msvc.zip'; Commands=@(@{ Name='rg'; Args=@('--version') }) },
+  [ordered]@{ Id='http:bat'; Version='v0.26.1'; Url='https://github.com/sharkdp/bat/releases/download/v0.26.1/bat-v0.26.1-x86_64-pc-windows-msvc.zip'; Commands=@(@{ Name='bat'; Args=@('--version') }) },
+  [ordered]@{ Id='http:fd'; Version='v10.4.2'; Url='https://github.com/sharkdp/fd/releases/download/v10.4.2/fd-v10.4.2-x86_64-pc-windows-msvc.zip'; Commands=@(@{ Name='fd'; Args=@('--version') }) },
+  [ordered]@{ Id='http:zoxide'; Version='v0.9.9'; Url='https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.9/zoxide-0.9.9-x86_64-pc-windows-msvc.zip'; Commands=@(@{ Name='zoxide'; Args=@('--version') }) },
+  [ordered]@{ Id='http:delta'; Version='0.19.2'; Url='https://github.com/dandavison/delta/releases/download/0.19.2/delta-0.19.2-x86_64-pc-windows-msvc.zip'; Commands=@(@{ Name='delta'; Args=@('--version') }) },
+  [ordered]@{ Id='http:hyperfine'; Version='v1.20.0'; Url='https://github.com/sharkdp/hyperfine/releases/download/v1.20.0/hyperfine-v1.20.0-x86_64-pc-windows-msvc.zip'; Commands=@(@{ Name='hyperfine'; Args=@('--version') }) },
+  [ordered]@{ Id='http:lsd'; Version='v1.2.0'; Url='https://github.com/lsd-rs/lsd/releases/download/v1.2.0/lsd-v1.2.0-x86_64-pc-windows-msvc.zip'; Commands=@(@{ Name='lsd'; Args=@('--version') }) },
+  [ordered]@{ Id='http:btm'; Version='0.14.2'; Url='https://github.com/ClementTsang/bottom/releases/download/0.14.2/bottom_x86_64-pc-windows-msvc.zip'; Commands=@(@{ Name='btm'; Args=@('--version') }) },
   [ordered]@{ Id='http:broot'; Version='v1.57.0'; Repo='Canop/broot'; Tag='v1.57.0'; Url='https://github.com/Canop/broot/releases/download/v1.57.0/broot_1.57.0.zip'; BinPath='x86_64-pc-windows-gnu'; Commands=@(@{ Name='broot'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:bootandy/dust'; Version='v1.2.4'; Commands=@(@{ Name='dust'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:ducaale/xh'; Version='v0.26.1'; Commands=@(@{ Name='xh'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:chmln/sd'; Version='v1.1.0'; Commands=@(@{ Name='sd'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:theryangeary/choose'; Version='v1.3.7'; Commands=@(@{ Name='choose'; Args=@('--version') }) },
-  [ordered]@{ Id='aqua:svenstaro/genact'; Version='v1.5.1'; Commands=@(@{ Name='genact'; Args=@('--version') }) }
+  [ordered]@{ Id='http:dust'; Version='v1.2.4'; Url='https://github.com/bootandy/dust/releases/download/v1.2.4/dust-v1.2.4-x86_64-pc-windows-msvc.zip'; Commands=@(@{ Name='dust'; Args=@('--version') }) },
+  [ordered]@{ Id='http:xh'; Version='v0.26.1'; Url='https://github.com/ducaale/xh/releases/download/v0.26.1/xh-v0.26.1-x86_64-pc-windows-msvc.zip'; Commands=@(@{ Name='xh'; Args=@('--version') }) },
+  [ordered]@{ Id='http:sd'; Version='v1.1.0'; Url='https://github.com/chmln/sd/releases/download/v1.1.0/sd-v1.1.0-x86_64-pc-windows-msvc.zip'; Commands=@(@{ Name='sd'; Args=@('--version') }) },
+  [ordered]@{ Id='http:choose'; Version='v1.3.7'; Url='https://github.com/theryangeary/choose/releases/download/v1.3.7/choose-x86_64-pc-windows-gnu.exe'; Bin='choose.exe'; Commands=@(@{ Name='choose'; Args=@('--version') }) },
+  [ordered]@{ Id='http:genact'; Version='v1.5.1'; Url='https://github.com/svenstaro/genact/releases/download/v1.5.1/genact-1.5.1-x86_64-pc-windows-msvc.exe'; Bin='genact.exe'; Commands=@(@{ Name='genact'; Args=@('--version') }) }
 )
 
 <#
@@ -268,7 +268,7 @@ function Set-MiseEnvironment {
   $env:MISE_GLOBAL_CONFIG_FILE = $MiseConfigFile
   $env:MISE_TRUSTED_CONFIG_PATHS = $Root
   $env:MISE_YES = '1'
-  $env:MISE_JOBS = '4'
+  $env:MISE_JOBS = '1'
   $env:TEMP = $TmpDir
   $env:TMP = $TmpDir
   $env:npm_config_cache = Join-Path $PkgDir 'npm-cache'
@@ -322,6 +322,10 @@ function Write-MiseConfig {
     if ($tool.Contains('BinPath') -and -not [string]::IsNullOrWhiteSpace([string]$tool.BinPath)) {
       $binPath = Format-TomlString ([string]$tool.BinPath)
       $properties.Add(('bin_path = {0}' -f $binPath)) | Out-Null
+    }
+    if ($tool.Contains('Bin') -and -not [string]::IsNullOrWhiteSpace([string]$tool.Bin)) {
+      $bin = Format-TomlString ([string]$tool.Bin)
+      $properties.Add(('bin = {0}' -f $bin)) | Out-Null
     }
     if ($properties.Count -gt 1) {
       $lines.Add(('{0} = {{ {1} }}' -f $id, ($properties -join ', '))) | Out-Null
